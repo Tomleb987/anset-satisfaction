@@ -2,7 +2,7 @@
 
 Collecte de satisfaction **sans SurveyMonkey** : un formulaire HTML court écrit dans Supabase
 via une Edge Function. Fusionne l'analyse satisfaction (managers) et la prospection/recontact
-(conseillers) dans un seul outil. Projet Supabase `ldjoclcbvydtbsltqvin` — région `eu-west-3` (UE).
+(conseillers) dans un seul outil. Projet Supabase `xizitftoejfxaizztzeu` — région `eu-west-1` (UE).
 
 ## Chaîne
 
@@ -47,10 +47,11 @@ sondage.html                                    # formulaire public : interactio
 satisfaction_anset.html                          # app 3 onglets : Satisfaction (dont par motif + carte Sinistres) · Prospection · Requête (2 imports : requête + sinistres clos)
 ```
 
-> Projet Supabase **neuf** créé le 2026-07-24 (`ldjoclcbvydtbsltqvin`, org `coverseas`, `eu-west-3`).
-> La migration `20260723090200_base_schema.sql` crée le schéma fondateur (`conseillers`,
-> `reponses_satisfaction`, `leads`, `lead_notes`, enum `lead_statut`, vue `v_satisfaction_agence`) ;
-> les migrations suivantes l'enrichissent. `db push` applique l'ensemble dans l'ordre.
+> Projet Supabase `xizitftoejfxaizztzeu` (région `eu-west-1`, UE), configuré lors d'une session
+> précédente (tables de base et fonctions déjà présentes). La migration `20260723090200_base_schema.sql`
+> est **idempotente** (`create table if not exists`, `create or replace`) : elle garantit le schéma
+> fondateur (`conseillers`, `reponses_satisfaction`, `leads`, `lead_notes`, enum `lead_statut`, vue
+> `v_satisfaction_agence`) sans casser l'existant ; les migrations suivantes l'enrichissent.
 
 ## Schéma réel (rappel des points sensibles)
 
@@ -100,7 +101,7 @@ satisfaction_anset.html                          # app 3 onglets : Satisfaction 
 
 ## Sécurité & RGPD
 
-- Hébergement UE (`eu-west-3`). Aucun transfert hors UE (SurveyMonkey abandonné → token à révoquer).
+- Hébergement UE (`eu-west-1`). Aucun transfert hors UE (SurveyMonkey abandonné → token à révoquer).
 - Consentement recontact explicite (case non pré-cochée), preuve horodatée dans `leads.consentement_source`.
 - PII derrière login (RLS `authenticated`) ; la fonction écrit en service_role.
 - Anti-spam Turnstile vérifié côté serveur : sans token valide, aucune écriture.

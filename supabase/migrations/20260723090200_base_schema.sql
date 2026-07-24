@@ -82,7 +82,10 @@ alter table public.leads                   enable row level security;
 alter table public.lead_notes              enable row level security;
 
 -- --- Vue AGENCE (par campagne × agence) — nps_score (alias attendu par l'app) -
-create or replace view public.v_satisfaction_agence
+-- drop + create : sur un projet déjà configuré, une v_satisfaction_agence
+-- préexistante peut avoir un autre ordre de colonnes (create-or-replace échouerait).
+drop view if exists public.v_satisfaction_agence;
+create view public.v_satisfaction_agence
 with (security_invoker = on) as
 select campagne, agence,
   count(*)                                             as reponses,

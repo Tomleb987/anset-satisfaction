@@ -12,8 +12,8 @@ description: >
 
 # ANSET — Satisfaction & Prospection (domaine)
 
-Outil unique remplaçant SurveyMonkey. Projet Supabase `ldjoclcbvydtbsltqvin`,
-région **eu-west-3 (UE)**. Voir `README.md` pour la mise en service détaillée.
+Outil unique remplaçant SurveyMonkey. Projet Supabase `xizitftoejfxaizztzeu`,
+région **eu-west-1 (UE)**. Voir `README.md` pour la mise en service détaillée.
 
 ## Chaîne de collecte
 
@@ -36,7 +36,7 @@ Diffusion mensuelle : import `.xlsx` → `envois_sondage` → Edge Function `env
 
 Le schéma fondateur (`conseillers`, `reponses_satisfaction`, `leads`, `lead_notes`, enum
 `lead_statut`, vue `v_satisfaction_agence`) est créé par `20260723090200_base_schema.sql` ;
-les migrations suivantes l'enrichissent. Projet **neuf** `ldjoclcbvydtbsltqvin` (org `coverseas`).
+les migrations suivantes l'enrichissent. Projet `xizitftoejfxaizztzeu` (eu-west-1, configuré précédemment).
 
 - `response_id` : **unique** sur `reponses_satisfaction` ET `leads` → upsert idempotent
   (une re-soumission ne duplique pas).
