@@ -6,269 +6,338 @@
 <title>ANSET — Pilotage Satisfaction & Prospection</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --blue:#1C509D; --blue-dark:#143a72; --blue-soft:#e9f0f9;
-    --ciel:#6A9BAF; --corail:#D36F6B; --moutarde:#E69D46; --menthe:#77AA92; --mauve:#715689;
-    --prom:#77AA92; --passif:#E69D46; --detr:#D36F6B;
-    --bg:#f4f6f9; --surface:#ffffff; --surface-2:#eef2f7; --border:#e2e8f1;
-    --text:#18233a; --muted:#657189;
-    --radius:14px; --shadow:0 1px 2px rgba(20,40,80,.05), 0 2px 8px rgba(20,40,80,.06);
+  :root{
+    --blue:#1C509D; --blue-2:#2f66bb; --ciel:#6A9BAF; --mauve:#715689;
+    --good:#4f9e7f; --warn:#d98b34; --bad:#cf5a54;
+    --bg:#eef2f7; --surface:#ffffff; --surface-2:#f4f7fb; --border:#dbe3ee;
+    --ink:#16233c; --muted:#5d6b83; --faint:#93a1b8;
+    --shadow:0 1px 2px rgba(20,40,80,.04), 0 4px 18px rgba(20,40,80,.07);
+    --radius:16px; --grad:linear-gradient(135deg, var(--blue), var(--mauve));
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --blue:#5c96e0; --blue-dark:#3f78c4; --blue-soft:#16253c;
-      --bg:#0e1420; --surface:#151d2b; --surface-2:#1b2536; --border:#28344a;
-      --text:#e7ecf4; --muted:#93a1b8; --shadow:none;
+  @media (prefers-color-scheme: dark){
+    :root{
+      --blue:#5c96e0; --blue-2:#7aade8; --ciel:#7fa9bc; --mauve:#9b82b4;
+      --good:#5fb492; --warn:#e0a24f; --bad:#e07b74;
+      --bg:#0d1320; --surface:#141c2b; --surface-2:#1a2436; --border:#28344a;
+      --ink:#e8edf5; --muted:#9aa8bf; --faint:#6c7c96;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 6px 22px rgba(0,0,0,.28);
     }
   }
-  * { box-sizing:border-box; }
-  body { margin:0; font-family:"DM Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-    background:var(--bg); color:var(--text); line-height:1.45; }
-  .num { font-variant-numeric:tabular-nums; }
-  .mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; }
+  :root[data-theme="light"]{
+    --blue:#1C509D; --blue-2:#2f66bb; --ciel:#6A9BAF; --mauve:#715689;
+    --good:#4f9e7f; --warn:#d98b34; --bad:#cf5a54;
+    --bg:#eef2f7; --surface:#ffffff; --surface-2:#f4f7fb; --border:#dbe3ee;
+    --ink:#16233c; --muted:#5d6b83; --faint:#93a1b8;
+    --shadow:0 1px 2px rgba(20,40,80,.04), 0 4px 18px rgba(20,40,80,.07);
+  }
+  :root[data-theme="dark"]{
+    --blue:#5c96e0; --blue-2:#7aade8; --ciel:#7fa9bc; --mauve:#9b82b4;
+    --good:#5fb492; --warn:#e0a24f; --bad:#e07b74;
+    --bg:#0d1320; --surface:#141c2b; --surface-2:#1a2436; --border:#28344a;
+    --ink:#e8edf5; --muted:#9aa8bf; --faint:#6c7c96;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 6px 22px rgba(0,0,0,.28);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--ink);
+    font-family:"DM Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; line-height:1.5;}
+  .num{font-variant-numeric:tabular-nums;}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px;}
 
-  /* ---- Gate de connexion ---- */
-  #gate { position:fixed; inset:0; background:var(--bg); display:flex; align-items:center; justify-content:center; z-index:100; }
-  #gate .card { width:360px; max-width:92vw; }
-  #gate img { height:42px; margin-bottom:20px; }
-  #gate h1 { font-size:18px; margin:0 0 4px; }
-  #gate p { color:var(--muted); font-size:13px; margin:0 0 18px; }
-  #gate input { width:100%; margin-bottom:12px; }
-  #gate button { width:100%; }
+  /* Gate */
+  #gate{position:fixed; inset:0; background:var(--bg); display:flex; align-items:center; justify-content:center; z-index:100;}
+  #gate .box{width:360px; max-width:92vw; background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); box-shadow:var(--shadow); padding:30px 28px;}
+  #gate .logo{width:44px; height:44px; border-radius:11px; background:var(--grad); color:#fff;
+    display:grid; place-items:center; font-weight:800; font-size:19px; margin-bottom:18px;
+    box-shadow:0 4px 14px color-mix(in srgb,var(--mauve) 35%,transparent);}
+  #gate h1{font-size:19px; margin:0 0 4px;} #gate p{color:var(--muted); font-size:13px; margin:0 0 18px;}
+  #gate input{width:100%; margin-bottom:12px; background:var(--surface); color:var(--ink);
+    border:1px solid var(--border); border-radius:10px; padding:11px 13px; font:inherit; font-size:14px;}
+  #gate button{width:100%; background:var(--grad); color:#fff; border:0; border-radius:10px;
+    padding:12px; font:inherit; font-size:14px; font-weight:700; cursor:pointer;}
 
-  /* ---- App shell ---- */
-  #app { display:none; }
-  header.appbar { display:flex; align-items:center; gap:18px; padding:12px 22px; background:var(--surface);
-    border-bottom:1px solid var(--border); position:sticky; top:0; z-index:20; }
-  header.appbar img.logo { height:30px; }
-  .tabs { display:flex; gap:4px; margin-left:12px; }
-  .tab { border:none; background:transparent; color:var(--muted); padding:8px 16px; border-radius:9px;
-    cursor:pointer; font-size:14px; font-weight:600; font-family:inherit; }
-  .tab.active { background:var(--blue-soft); color:var(--blue); }
-  .appbar .spacer { flex:1; }
-  .appbar .who { color:var(--muted); font-size:12.5px; }
-  main { padding:22px; max-width:1240px; margin:0 auto; }
-  section.view { display:none; }
-  section.view.active { display:block; }
+  #app{display:none; max-width:1180px; margin:0 auto; padding:22px 22px 60px;}
+  .appbar{display:flex; align-items:center; gap:16px; margin-bottom:22px; padding-bottom:16px;
+    border-bottom:2px solid transparent; border-image:var(--grad) 1;}
+  .brand{display:flex; align-items:center; gap:11px;}
+  .brand .logo{width:34px; height:34px; border-radius:9px; background:var(--grad); color:#fff;
+    display:grid; place-items:center; font-weight:800; font-size:15px;
+    box-shadow:0 3px 10px color-mix(in srgb,var(--mauve) 35%,transparent);}
+  .brand b{font-size:16px;} .brand span{color:var(--muted); font-size:12.5px;}
+  .appbar .sp{flex:1;}
+  .seg{display:flex; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:3px;}
+  .seg button{border:0; background:transparent; color:var(--muted); font:inherit; font-size:13px;
+    font-weight:600; padding:6px 13px; border-radius:7px; cursor:pointer;}
+  .seg button.on{background:var(--surface); color:var(--blue); box-shadow:var(--shadow);}
+  .who{color:var(--muted); font-size:12.5px;}
+  .ghost{border:1px solid var(--border); background:var(--surface); color:var(--muted);
+    border-radius:9px; padding:7px 10px; cursor:pointer; font:inherit; font-size:13px;}
 
-  /* ---- Contrôles ---- */
-  .toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:20px; }
-  .toolbar .spacer { flex:1; }
-  select, input[type=text], input[type=password], input[type=email], input[type=month] {
-    background:var(--surface); color:var(--text); border:1px solid var(--border);
-    border-radius:9px; padding:8px 11px; font-size:14px; font-family:inherit; }
-  label.fld { font-size:12.5px; color:var(--muted); display:inline-flex; align-items:center; gap:7px; }
-  button.btn { background:var(--blue); color:#fff; border:none; border-radius:9px; padding:9px 15px;
-    font-size:14px; font-weight:600; font-family:inherit; cursor:pointer; }
-  button.btn.ghost { background:var(--surface); color:var(--text); border:1px solid var(--border); }
-  button.btn:disabled { opacity:.5; cursor:not-allowed; }
-  label.filelabel { display:inline-flex; } label.filelabel input { display:none; }
+  .view{display:none;} .view.active{display:block; animation:fade .2s ease;}
+  @keyframes fade{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;}}
 
-  .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); }
-  .panel { padding:18px; margin-bottom:20px; }
-  .panel h2 { font-size:14px; margin:0 0 4px; letter-spacing:.2px; }
-  .panel .sub { color:var(--muted); font-size:12.5px; margin:0 0 16px; }
-  .grid2 { display:grid; grid-template-columns:2fr 1fr; gap:20px; } @media(max-width:900px){ .grid2{grid-template-columns:1fr;} }
+  .toolbar{display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:16px;}
+  .toolbar .sp{flex:1;}
+  select, input[type=text], input[type=password], input[type=email], input[type=month]{
+    background:var(--surface); color:var(--ink); border:1px solid var(--border);
+    border-radius:9px; padding:8px 11px; font:inherit; font-size:13px;}
+  label.fld{font-size:12.5px; color:var(--muted); display:inline-flex; align-items:center; gap:7px;}
 
-  /* ---- KPI tiles ---- */
-  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:20px; }
-  .kpi { padding:15px 17px; position:relative; }
-  .kpi .lbl { color:var(--muted); font-size:11.5px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; }
-  .kpi .val { font-size:28px; font-weight:700; margin-top:5px; display:flex; align-items:baseline; gap:8px; }
-  .kpi .delta { font-size:12.5px; font-weight:700; }
-  .kpi .spark { position:absolute; right:14px; bottom:12px; opacity:.85; }
-  .kpi .foot { color:var(--muted); font-size:12px; margin-top:2px; }
-  .up { color:var(--menthe); } .down { color:var(--corail); } .flat { color:var(--muted); }
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow);}
+  .pad{padding:20px 22px;} .panel{padding:18px 20px; margin-bottom:16px;}
+  h2.title{font-size:15px; margin:0 0 2px;} .sub{color:var(--muted); font-size:12.5px; margin:0 0 14px;}
+  .eyebrow{font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--muted);}
+  .grid2{display:grid; grid-template-columns:1.4fr 1fr; gap:16px;} @media(max-width:840px){.grid2{grid-template-columns:1fr;}}
+  .capline{font-size:12.5px; color:var(--muted); margin:0 0 14px;} .capline b{color:var(--ink);}
 
-  table { width:100%; border-collapse:collapse; font-size:13.5px; }
-  th,td { text-align:left; padding:9px 11px; border-bottom:1px solid var(--border); white-space:nowrap; }
-  th { color:var(--muted); font-weight:600; font-size:11.5px; text-transform:uppercase; letter-spacing:.3px; cursor:pointer; }
-  th.n, td.n { text-align:right; }
-  tbody tr:hover { background:var(--surface-2); }
-  .table-wrap { overflow-x:auto; }
-  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle; }
-  .chip { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; background:var(--surface-2); color:var(--muted); }
+  /* Hero */
+  .hero{display:grid; grid-template-columns:minmax(0,1.15fr) 1fr; gap:16px; margin-bottom:16px;}
+  @media(max-width:840px){.hero{grid-template-columns:1fr;}}
+  .hero-nps{background:linear-gradient(155deg, color-mix(in srgb,var(--mauve) 7%,var(--surface)) 0%, var(--surface) 55%);}
+  .score{display:flex; align-items:flex-end; gap:14px; margin:6px 0 2px;}
+  .big{font-size:72px; font-weight:800; line-height:.9; letter-spacing:-2px;}
+  .verdict{display:inline-flex; align-items:center; gap:7px; padding:5px 11px; border-radius:999px; font-size:13px; font-weight:700; margin-bottom:8px;}
+  .verdict .ic{width:9px; height:9px; border-radius:50%;}
+  .trendtag{font-size:13px; font-weight:700; display:inline-flex; align-items:center; gap:5px;}
+  .trendtag .vs{color:var(--muted); font-weight:500;}
+  .up{color:var(--good);} .down{color:var(--bad);} .flat{color:var(--muted);}
+  .herofoot{color:var(--muted); font-size:13px; margin-top:14px;} .herofoot b{color:var(--ink);}
+  .scale{margin-top:16px;}
+  .scaletrack{position:relative; height:12px; border-radius:999px; overflow:hidden;
+    background:linear-gradient(90deg, var(--bad) 0%, var(--warn) 42%, #cfe0d6 55%, var(--good) 100%); opacity:.9;}
+  .scalemark{position:absolute; top:-4px; width:4px; height:20px; border-radius:2px; background:var(--ink); transform:translateX(-50%); box-shadow:0 0 0 3px var(--surface);}
+  .scaletarget{position:absolute; top:-2px; height:16px; border-left:2px dashed var(--muted); transform:translateX(-50%);}
+  .scalelbls{display:flex; justify-content:space-between; color:var(--faint); font-size:11px; margin-top:8px;}
+  .compo-bar{display:flex; height:30px; border-radius:8px; overflow:hidden; gap:2px; margin:14px 0 12px;}
+  .compo-bar>div{display:grid; place-items:center; color:#fff; font-size:12px; font-weight:700; min-width:30px; cursor:default; transition:filter .12s;}
+  .compo-bar>div:hover{filter:brightness(1.09);}
+  .legend{display:flex; flex-wrap:wrap; gap:16px; font-size:12.5px; color:var(--muted);}
+  .legend .it{display:inline-flex; align-items:center; gap:7px;} .legend .sw{width:11px; height:11px; border-radius:3px;} .legend b{color:var(--ink);}
 
-  /* ---- barres horizontales (zones) ---- */
-  .hbar { display:grid; grid-template-columns:130px 1fr 84px; gap:10px; align-items:center; padding:6px 0; font-size:13px; }
-  .hbar .track { background:var(--surface-2); border-radius:6px; height:16px; overflow:hidden; }
-  .hbar .fill { height:100%; border-radius:6px; }
+  /* KPI */
+  .kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:14px; margin:0 0 16px;}
+  .kpi{padding:16px 17px 14px;}
+  .kpi .top{display:flex; align-items:flex-start; justify-content:space-between; gap:8px;}
+  .kpi .lbl{font-size:13px; font-weight:600; color:var(--ink);} .kpi .sig{font-size:11px; color:var(--faint);}
+  .kpi .pill{font-size:10.5px; font-weight:700; padding:3px 8px; border-radius:999px; white-space:nowrap;}
+  .kpi .v{display:flex; align-items:baseline; gap:4px; margin:10px 0 2px;}
+  .kpi .v .n{font-size:32px; font-weight:800; letter-spacing:-1px; line-height:1;}
+  .kpi .v .u{font-size:15px; color:var(--muted); font-weight:600;}
+  .kpi .row{display:flex; align-items:center; justify-content:space-between; margin-top:8px;}
+  .kpi .ctx{font-size:12px; color:var(--muted);}
+  .spark{display:block;}
 
-  /* ---- composition NPS empilée ---- */
-  .compo { display:flex; flex-direction:column; gap:7px; }
-  .compo .row { display:grid; grid-template-columns:64px 1fr; gap:10px; align-items:center; font-size:12px; }
-  .compo .bar { display:flex; height:18px; border-radius:5px; overflow:hidden; }
-  .compo .bar > span { display:block; }
+  /* Tableaux */
+  .table-wrap{overflow-x:auto;}
+  table.bd{width:100%; border-collapse:collapse; font-size:13px;}
+  table.bd th, table.bd td{text-align:right; padding:10px 11px; border-bottom:1px solid var(--border); white-space:nowrap;}
+  table.bd th:first-child, table.bd td:first-child{text-align:left;}
+  table.bd th{color:var(--muted); font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; font-weight:700; cursor:default;}
+  table.bd tbody tr:hover{background:var(--surface-2);} table.bd td:first-child{font-weight:600;}
+  table.bd .agc{color:var(--faint); font-weight:400; font-size:11.5px;}
+  .cchip{display:inline-block; min-width:38px; padding:2px 8px; border-radius:7px; font-weight:700; font-variant-numeric:tabular-nums;}
+  #leads th, #leads td{text-align:left;}
 
-  /* ---- verbatims ---- */
-  .vb { border-left:3px solid var(--border); padding:8px 12px; margin-bottom:10px; font-size:13.5px; }
-  .vb.det { border-left-color:var(--detr); }
-  .vb .meta { color:var(--muted); font-size:11.5px; margin-top:4px; }
+  /* Barres agences */
+  .bars{display:flex; flex-direction:column; gap:11px;}
+  .bar{display:grid; grid-template-columns:110px 1fr 46px; gap:12px; align-items:center; font-size:13px; cursor:default;}
+  .bar .track{position:relative; height:14px; background:var(--surface-2); border-radius:7px; overflow:hidden;}
+  .bar .fill{position:absolute; top:0; bottom:0; border-radius:7px;} .bar:hover .fill{filter:brightness(1.06);}
+  .bar .zero{position:absolute; top:-3px; bottom:-3px; width:1px; background:var(--border);}
+  .bar .val{text-align:right; font-weight:700;}
 
-  /* ---- heatmap ---- */
-  .heat { border-collapse:separate; border-spacing:3px; font-size:11px; }
-  .heat td { padding:0; border:none; white-space:nowrap; }
-  .heat .cell { width:38px; height:26px; border-radius:5px; text-align:center; color:#fff; font-weight:600; line-height:26px; }
-  .heat .rowlbl { color:var(--muted); padding-right:8px; text-align:right; }
-  .heat .collbl { color:var(--muted); text-align:center; font-size:10px; }
+  /* Verbatims */
+  .vb{border-left:3px solid var(--border); padding:9px 0 9px 13px; margin-bottom:12px;}
+  .vb.det{border-left-color:var(--bad);}
+  .vb p{margin:0 0 5px; font-size:13.5px;} .vb .meta{font-size:11.5px; color:var(--faint); display:flex; gap:9px; flex-wrap:wrap;}
 
-  /* ---- pills statut leads ---- */
-  .pill { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:600; }
-  .st-nouveau{background:var(--blue-soft);color:var(--blue);} .st-a_contacter{background:#ece7f6;color:#6d4fae;}
-  .st-injoignable{background:var(--surface-2);color:var(--muted);} .st-rappel{background:#e6f6fb;color:#0e7490;}
-  .st-interesse{background:#fff2e6;color:#b5651b;} .st-devis{background:#fdf6e3;color:#9a7b12;}
-  .st-souscrit{background:#e9f7ef;color:#2e8b57;} .st-sans_suite{background:#fdeceb;color:#c0392b;}
-  .st-ne_pas_contacter{background:#fdeceb;color:#c0392b;}
+  /* Pills statut leads */
+  .pill-st{display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:700;}
+  .st-nouveau{background:color-mix(in srgb,var(--blue) 16%,transparent);color:var(--blue);}
+  .st-a_contacter{background:color-mix(in srgb,var(--mauve) 16%,transparent);color:var(--mauve);}
+  .st-injoignable{background:var(--surface-2);color:var(--muted);}
+  .st-rappel{background:color-mix(in srgb,var(--ciel) 20%,transparent);color:var(--ciel);}
+  .st-interesse,.st-devis{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn);}
+  .st-souscrit{background:color-mix(in srgb,var(--good) 16%,transparent);color:var(--good);}
+  .st-sans_suite,.st-ne_pas_contacter{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad);}
 
-  .empty { text-align:center; color:var(--muted); padding:44px 20px; }
-  .notice { padding:10px 14px; border-radius:9px; font-size:13px; margin:12px 0; }
-  .notice.err { background:#fdeceb; color:#c0392b; } .notice.ok { background:#e9f7ef; color:#2e8b57; }
-  .faint { color:var(--muted); }
+  /* Administration */
+  .drop{display:block; border:2px dashed var(--border); border-radius:13px; padding:24px 18px; text-align:center;
+    color:var(--muted); cursor:pointer; transition:.15s; background:var(--surface-2);}
+  .drop:hover{border-color:var(--blue); color:var(--blue);}
+  .drop .ic{font-size:24px; display:block; margin-bottom:6px;} .drop b{color:var(--ink);} .drop input{display:none;}
+  .adminrow{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:14px 0;}
+  .btn{background:var(--blue); color:#fff; border:0; border-radius:9px; padding:9px 16px; font:inherit; font-size:13.5px; font-weight:600; cursor:pointer;}
+  .btn:hover{background:var(--blue-2);} .btn:disabled{opacity:.5; cursor:not-allowed;} .btn.ghost{background:var(--surface); color:var(--ink); border:1px solid var(--border);}
+  .tag-mono{font-family:ui-monospace,Menlo,monospace; font-size:12px; background:var(--surface-2); padding:1px 6px; border-radius:5px; color:var(--ink);}
+  .notice{padding:11px 14px; border-radius:10px; font-size:13px; margin-top:14px;}
+  .notice.ok{background:color-mix(in srgb,var(--good) 14%,transparent); color:var(--good);}
+  .notice.err{background:color-mix(in srgb,var(--bad) 14%,transparent); color:var(--bad);}
+  .mini-kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-top:12px;}
+  .mk{background:var(--surface-2); border:1px solid var(--border); border-radius:11px; padding:12px 14px;}
+  .mk .n{font-size:22px; font-weight:800;} .mk .l{font-size:11.5px; color:var(--muted);}
+  .empty{text-align:center; color:var(--muted); padding:40px 20px;}
+  .tt{position:fixed; z-index:60; pointer-events:none; background:var(--ink); color:var(--surface);
+    border-radius:9px; padding:8px 11px; font-size:12px; line-height:1.45; box-shadow:0 8px 24px rgba(10,20,40,.28);
+    max-width:230px; opacity:0; transition:opacity .1s;} .tt.on{opacity:1;}
+  #chart-trend rect[data-i]:hover{fill:color-mix(in srgb,var(--blue) 5%,transparent);}
 </style>
 </head>
 <body>
 
-<!-- =============================== GATE =============================== -->
+<!-- ================= GATE ================= -->
 <div id="gate">
-  <div class="card panel" style="padding:28px">
-    <img src="anset_brand_logo_TAHITI.png" alt="ANSET Assurances" />
+  <div class="box">
+    <div class="logo">A</div>
     <h1>Pilotage ANSET</h1>
-    <p>Accès réservé. Données clients protégées (RLS Supabase).</p>
+    <p>Accès réservé — données clients protégées (RLS Supabase).</p>
     <div id="gate-err"></div>
     <input type="email" id="gate-email" placeholder="Email" autocomplete="username" />
     <input type="password" id="gate-pass" placeholder="Mot de passe" autocomplete="current-password" />
-    <button class="btn" id="gate-btn">Se connecter</button>
+    <button id="gate-btn">Se connecter</button>
   </div>
 </div>
 
-<!-- =============================== APP =============================== -->
+<!-- ================= APP ================= -->
 <div id="app">
   <header class="appbar">
-    <img class="logo" src="anset_brand_logo_TAHITI.png" alt="ANSET" />
-    <nav class="tabs">
-      <button class="tab active" data-view="satisfaction">Satisfaction</button>
-      <button class="tab" data-view="prospection">Prospection</button>
-      <button class="tab" data-view="requete">Requête</button>
-    </nav>
-    <div class="spacer"></div>
+    <div class="brand"><div class="logo">A</div>
+      <div><b>ANSET</b> · Pilotage satisfaction<br><span>Assurances — Tahiti</span></div></div>
+    <div class="sp"></div>
+    <div class="seg" id="tabs">
+      <button class="on" data-view="satisfaction">Satisfaction</button>
+      <button data-view="prospection">Prospection</button>
+      <button data-view="requete">Administration</button>
+    </div>
     <span class="who" id="who"></span>
-    <button class="btn ghost" id="logout">Déconnexion</button>
+    <button class="ghost" id="themeBtn" title="Thème">◐</button>
+    <button class="ghost" id="logout">Déconnexion</button>
   </header>
 
-  <main>
-    <!-- ===================== SATISFACTION ===================== -->
-    <section class="view active" id="view-satisfaction">
-      <div class="toolbar">
-        <label class="fld">Campagne <select id="f-campagne"></select></label>
-        <label class="fld">Zone <select id="f-zone"><option value="">Toutes</option></select></label>
-        <label class="fld">Agence <select id="f-agence"><option value="">Toutes</option></select></label>
-        <div class="spacer"></div>
-        <button class="btn ghost" id="sat-refresh">Actualiser</button>
-      </div>
-      <div id="sat-body">
-        <div class="kpis" id="kpis"></div>
-        <div class="grid2">
-          <div class="card panel">
-            <h2>Score NPS — tendance</h2>
-            <div class="sub">Par campagne · cible +30 (pointillés)</div>
-            <div id="chart-nps"></div>
+  <!-- ===== SATISFACTION ===== -->
+  <section class="view active" id="view-satisfaction">
+    <div class="toolbar">
+      <label class="fld">Campagne <select id="f-campagne"></select></label>
+      <div class="sp"></div>
+      <button class="ghost" id="sat-refresh">Actualiser</button>
+    </div>
+    <div id="sat-body">
+      <div class="hero">
+        <div class="card pad hero-nps">
+          <div class="eyebrow">Recommandation client · indice NPS</div>
+          <div class="score"><div class="big num" id="h-score">—</div><div id="h-side"></div></div>
+          <div class="scale">
+            <div class="scaletrack"><div class="scaletarget" style="left:65%" title="Objectif +30"></div>
+              <div class="scalemark" id="h-mark" style="left:50%"></div></div>
+            <div class="scalelbls"><span>−100</span><span>0</span><span>Objectif +30</span><span>+100</span></div>
           </div>
-          <div class="card panel">
-            <h2>Composition NPS</h2>
-            <div class="sub">Promoteurs / passifs / détracteurs</div>
-            <div class="compo" id="chart-compo"></div>
-          </div>
+          <div class="herofoot" id="h-foot"></div>
         </div>
-        <div class="card panel">
-          <h2>Classement par zone</h2>
-          <div class="sub">Score NPS de la campagne sélectionnée · trait = moyenne réseau</div>
-          <div id="zones"></div>
+        <div class="card pad">
+          <div class="eyebrow">Composition des réponses</div>
+          <div class="compo-bar" id="compo"></div>
+          <div class="legend" id="compo-legend"></div>
+          <div class="herofoot" id="compo-foot"></div>
         </div>
-        <div class="card panel">
-          <h2>Par agence</h2>
-          <div class="sub" id="ag-sub"></div>
-          <div class="table-wrap"><table id="t-agences"></table></div>
-        </div>
-        <div class="card panel">
-          <h2>Par conseiller</h2>
-          <div class="sub" id="cons-sub"></div>
-          <div class="table-wrap"><table id="t-conseillers"></table></div>
-        </div>
-        <div class="grid2">
-          <div class="card panel">
-            <h2>Par motif d'interaction</h2>
-            <div class="sub" id="motif-sub"></div>
-            <div class="table-wrap"><table id="t-motifs"></table></div>
-          </div>
-          <div class="card panel" id="sinistre-card">
-            <h2>Sinistres clos</h2>
-            <div class="sub">Expérience de gestion des sinistres · campagne sélectionnée</div>
-            <div class="kpis" id="sinistre-kpis" style="margin-bottom:0"></div>
-          </div>
-        </div>
-        <div class="grid2">
-          <div class="card panel">
-            <h2>Voix du client</h2>
-            <div class="sub">Détracteurs en priorité</div>
-            <div id="verbatims"></div>
-          </div>
-          <div class="card panel">
-            <h2>Heatmap agences × campagnes</h2>
-            <div class="sub">Score NPS</div>
-            <div class="table-wrap" id="heatmap"></div>
-          </div>
-        </div>
-      </div>
-      <div id="sat-empty" class="empty card" style="display:none">Aucune réponse pour l'instant. Le dashboard s'alimentera dès les premières réponses.</div>
-    </section>
-
-    <!-- ===================== PROSPECTION ===================== -->
-    <section class="view" id="view-prospection">
-      <div class="toolbar">
-        <select id="p-statut"><option value="">Tous les statuts</option></select>
-        <select id="p-agence"><option value="">Toutes les agences</option></select>
-        <input type="text" id="p-search" placeholder="Rechercher nom / email…" />
-        <div class="spacer"></div>
-        <button class="btn ghost" id="p-refresh">Actualiser</button>
-      </div>
-      <div id="p-notice"></div>
-      <div class="kpis" id="p-kpis"></div>
-      <div class="card panel"><div class="table-wrap"><table id="t-leads"></table></div>
-        <div id="p-empty" class="empty" style="display:none">Aucun lead pour ces filtres.</div>
-      </div>
-    </section>
-
-    <!-- ===================== REQUÊTE ===================== -->
-    <section class="view" id="view-requete">
-      <div class="card panel">
-        <h2>Importer la requête du mois</h2>
-        <div class="sub">Fichier <span class="mono">.xlsx</span> des clients à interroger. Nettoyage encodage, dédoublonnage e-mail, exclusions (résilié non paiement, e-mail manquant), mapping agences, auto-création des conseillers depuis « Gestionnaire ». Le motif est laissé au choix du répondant.</div>
-        <div class="toolbar">
-          <label class="fld">Campagne <input type="month" id="r-campagne" /></label>
-          <div class="spacer"></div>
-          <label class="filelabel"><span class="btn">Choisir le fichier .xlsx</span>
-            <input type="file" id="r-file" accept=".xlsx,.xls" /></label>
-        </div>
-        <div id="r-notice"></div>
-        <div id="r-report"></div>
       </div>
 
-      <div class="card panel">
-        <h2>Importer les sinistres clos du mois</h2>
-        <div class="sub">Fichier <span class="mono">.xlsx</span> des sinistres clôturés (colonnes <span class="mono">num_sinistre, email, portable, gestionnaire…</span>). Ces clients reçoivent le questionnaire <b>adapté sinistre</b> (motif pré-rempli). Gestionnaire = conseiller ; agence résolue depuis le conseiller si connu. À importer <b>après</b> la requête générale.</div>
-        <div class="toolbar">
-          <label class="fld">Campagne <input type="month" id="s-campagne" /></label>
-          <div class="spacer"></div>
-          <label class="filelabel"><span class="btn">Choisir le fichier .xlsx</span>
-            <input type="file" id="s-file" accept=".xlsx,.xls" /></label>
-        </div>
-        <div id="s-notice"></div>
-        <div id="s-report"></div>
+      <p class="capline" id="capline"></p>
+      <div class="kpis" id="kpis"></div>
+
+      <div class="card pad" style="border-left:4px solid var(--mauve)">
+        <div class="eyebrow" style="color:var(--mauve)">Gestion des sinistres · clients récemment indemnisés</div>
+        <div class="kpis" id="sin-kpis" style="margin:14px 0 0"></div>
+        <div class="herofoot" id="sin-insight" style="margin-top:16px"></div>
       </div>
-    </section>
-  </main>
+
+      <div class="card pad" style="margin-top:16px">
+        <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:6px">
+          <h2 class="title" style="margin:0">Détail par</h2>
+          <div class="seg" id="granseg">
+            <button data-g="global" class="on">Global</button>
+            <button data-g="zone">Zone</button>
+            <button data-g="agence">Agence</button>
+            <button data-g="conseiller">Conseiller</button>
+          </div>
+        </div>
+        <p class="sub" id="gran-sub"></p>
+        <div class="table-wrap"><table class="bd" id="bd"></table></div>
+      </div>
+
+      <div class="grid2" style="margin-top:16px">
+        <div class="card pad">
+          <h2 class="title">Évolution du NPS</h2>
+          <p class="sub">Par campagne · ligne pointillée = objectif +30</p>
+          <div id="chart-trend"></div>
+        </div>
+        <div class="card pad">
+          <h2 class="title">Classement des agences</h2>
+          <p class="sub" id="bars-sub"></p>
+          <div class="bars" id="bars"></div>
+        </div>
+      </div>
+
+      <div class="card pad" style="margin-top:16px">
+        <h2 class="title">Ce que disent vos clients</h2>
+        <p class="sub">Priorité aux détracteurs</p>
+        <div id="verbatims"></div>
+      </div>
+    </div>
+    <div id="sat-empty" class="card empty" style="display:none">Aucune réponse pour l'instant. Le dashboard s'alimentera dès les premières réponses.</div>
+  </section>
+
+  <!-- ===== PROSPECTION ===== -->
+  <section class="view" id="view-prospection">
+    <div class="toolbar">
+      <select id="p-statut"></select>
+      <select id="p-agence"><option value="">Toutes les agences</option></select>
+      <input type="text" id="p-search" placeholder="Rechercher nom / email…" />
+      <div class="sp"></div>
+      <button class="ghost" id="p-refresh">Actualiser</button>
+    </div>
+    <div id="p-notice"></div>
+    <div class="kpis" id="p-kpis"></div>
+    <div class="card pad"><div class="table-wrap"><table class="bd" id="leads"></table></div>
+      <div id="p-empty" class="empty" style="display:none">Aucun lead pour ces filtres.</div></div>
+  </section>
+
+  <!-- ===== ADMINISTRATION ===== -->
+  <section class="view" id="view-requete">
+    <p class="sub" style="margin-bottom:16px">Espace administrateur — importez les fichiers du mois, puis lancez la diffusion des invitations.</p>
+    <div class="grid2">
+      <div class="card pad">
+        <h2 class="title">Requête du mois</h2>
+        <p class="sub">Clients à interroger — fichier <span class="tag-mono">.xlsx</span>.</p>
+        <div class="adminrow"><label class="fld">Campagne <input type="month" id="r-campagne"></label></div>
+        <label class="drop"><span class="ic">⬆︎</span><b>Choisir le fichier .xlsx</b><br>requête générale
+          <input type="file" id="r-file" accept=".xlsx,.xls"></label>
+        <p class="sub" style="margin:12px 0 0">Dédoublonnage e-mail · exclusions (résilié non-paiement, e-mail manquant) · mapping agences · conseillers depuis « Gestionnaire ».</p>
+        <div id="r-notice"></div><div id="r-report"></div>
+      </div>
+      <div class="card pad" style="border-left:4px solid var(--mauve)">
+        <h2 class="title">Sinistres clos du mois</h2>
+        <p class="sub">Clients indemnisés → questionnaire adapté sinistre.</p>
+        <div class="adminrow"><label class="fld">Campagne <input type="month" id="s-campagne"></label></div>
+        <label class="drop"><span class="ic">⬆︎</span><b>Choisir le fichier .xlsx</b><br>sinistres clos
+          <input type="file" id="s-file" accept=".xlsx,.xls"></label>
+        <p class="sub" style="margin:12px 0 0"><span class="tag-mono">num_sinistre</span>→réf · <span class="tag-mono">gestionnaire</span>→conseiller · <span class="tag-mono">portable</span>→tél · délai réel via <span class="tag-mono">ouverture→clôture</span> · motif=sinistre.</p>
+        <div id="s-notice"></div><div id="s-report"></div>
+      </div>
+    </div>
+    <div class="card pad" style="margin-top:16px">
+      <h2 class="title">Diffusion des invitations</h2>
+      <p class="sub">E-mails personnalisés (Brevo) programmés à H+2. Lien portant agence, conseiller, motif.</p>
+      <div class="adminrow">
+        <label class="fld">Campagne <input type="month" id="d-campagne"></label>
+        <button class="btn ghost" id="d-dry">Aperçu (aucun envoi)</button>
+        <button class="btn ghost" id="d-test">Test (1 e-mail)</button>
+        <button class="btn" id="d-send">Envoi réel</button>
+      </div>
+      <div id="d-notice"></div><div id="d-report"></div>
+    </div>
+  </section>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -279,415 +348,443 @@ const SB_URL  = "https://xizitftoejfxaizztzeu.supabase.co";
 const SB_ANON = "sb_publishable_TuAsNz3zhWxY1cRjEwtZOA_FPVfwzQK";
 const sb = window.supabase.createClient(SB_URL, SB_ANON);
 
-// Palette ANSET (charte)
-const PAL = { blue:"#1C509D", ciel:"#6A9BAF", corail:"#D36F6B", moutarde:"#E69D46", menthe:"#77AA92", mauve:"#715689" };
-const STATUT_LABELS = { nouveau:"Nouveau", a_contacter:"À contacter", injoignable:"Injoignable", rappel:"Rappel",
+const PAL={ blue:"#1C509D", ciel:"#6A9BAF", corail:"#D36F6B", moutarde:"#E69D46", menthe:"#77AA92", mauve:"#715689" };
+const STATUT_LABELS={ nouveau:"Nouveau", a_contacter:"À contacter", injoignable:"Injoignable", rappel:"Rappel",
   interesse:"Intéressé", devis:"Devis", souscrit:"Souscrit", sans_suite:"Sans suite", ne_pas_contacter:"Ne pas contacter" };
-const STATUTS = Object.keys(STATUT_LABELS);
-const MOTIF_LABELS = { souscription:"Souscription", sinistre:"Sinistre", gestion:"Gestion de contrat",
+const STATUTS=Object.keys(STATUT_LABELS);
+const MOTIF_LABELS={ souscription:"Souscription", sinistre:"Sinistre", gestion:"Gestion de contrat",
   reclamation:"Réclamation", information:"Information / conseil", autre:"Autre" };
-const MOTIF_COLORS = { souscription:PAL.blue, sinistre:PAL.corail, gestion:PAL.ciel,
-  reclamation:PAL.moutarde, information:PAL.menthe, autre:PAL.mauve };
+const MOIS=["janv.","févr.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."];
 
 // ---- utils ----
-const $ = s => document.querySelector(s);
-const esc = s => (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
-const norm = s => (s||"").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
-const fmt = (v,d=1)=> v==null||v===""?"—":Number(v).toFixed(d);
-const pct = v => v==null?"—":Number(v).toFixed(0)+"%";
-const scoreColor = v => v==null?"var(--muted)": v<0?PAL.corail : v<30?PAL.moutarde : v<50?PAL.menthe : PAL.blue;
-const csatColor  = v => v==null?"var(--muted)": v<3?PAL.corail : v<4?PAL.moutarde : PAL.menthe;
-const tauxColor  = v => v==null?"var(--muted)": v<10?PAL.corail : v<15?PAL.moutarde : PAL.menthe;
-let currentUserEmail = null;
+const $=s=>document.querySelector(s);
+const esc=s=>(s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+const norm=s=>(s||"").toString().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").trim();
+const fmt=(v,d=1)=> v==null||v===""?"—":Number(v).toFixed(d).replace(".",",");
+const pct=v=> v==null?"—":Number(v).toFixed(0)+" %";
+const moisCourt=c=> c?(MOIS[(+c.slice(5,7))-1]||c):"";
+const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const scoreColor=v=> v==null?cssv("--faint"): v<0?cssv("--bad") : v<30?cssv("--warn") : cssv("--good");
+const csatColor =v=> v==null?cssv("--faint"): v<3?cssv("--bad") : v<4?cssv("--warn") : cssv("--good");
+const tauxColor =v=> v==null?cssv("--faint"): v<10?cssv("--bad") : v<15?cssv("--warn") : cssv("--good");
+const delaiColor=v=> v==null?cssv("--faint"): v<=30?cssv("--good") : v<=40?cssv("--warn") : cssv("--bad");
+let currentUserEmail=null;
 
-// ---- SVG ----
-function sparkline(vals,{w=88,h=26,color=PAL.blue}={}) {
-  const clean = vals.filter(v=>v!=null);
-  if (clean.length<2) return "";
-  const min=Math.min(...clean), max=Math.max(...clean), rng=(max-min)||1;
-  const pts = vals.map((v,i)=> v==null?null:`${(i/(vals.length-1)*w).toFixed(1)},${(h-((v-min)/rng)*(h-4)-2).toFixed(1)}`).filter(Boolean).join(" ");
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polyline fill="none" stroke="${color}" stroke-width="2" points="${pts}"/></svg>`;
-}
-function lineChartNPS(series) { // [{campagne, score}]
-  const w=560,h=190,pl=34,pr=12,pt=14,pb=26;
-  const pts = series.filter(s=>s.score!=null);
-  if (pts.length<1) return '<div class="empty">Pas encore de données.</div>';
-  const vals = pts.map(s=>s.score).concat([0,30]);
-  let lo=Math.min(...vals), hi=Math.max(...vals); const pad=(hi-lo)*0.15||10; lo-=pad; hi+=pad;
-  const X=i=> pl+(series.length<=1?0:i/(series.length-1))*(w-pl-pr);
-  const Y=v=> pt+(1-(v-lo)/((hi-lo)||1))*(h-pt-pb);
-  const line = series.map((s,i)=> s.score==null?null:`${X(i).toFixed(1)},${Y(s.score).toFixed(1)}`).filter(Boolean).join(" ");
-  const dots = series.map((s,i)=> s.score==null?"":`<circle cx="${X(i).toFixed(1)}" cy="${Y(s.score).toFixed(1)}" r="3.5" fill="${scoreColor(s.score)}"/>`).join("");
-  const labels = series.map((s,i)=>`<text x="${X(i).toFixed(1)}" y="${h-8}" font-size="9" fill="var(--muted)" text-anchor="middle">${esc(s.campagne.slice(2))}</text>`).join("");
-  const yTicks=[lo,(lo+hi)/2,hi].map(v=>`<text x="4" y="${(Y(v)+3).toFixed(1)}" font-size="9" fill="var(--muted)">${v.toFixed(0)}</text>`).join("");
-  const target = (30>=lo&&30<=hi)?`<line x1="${pl}" y1="${Y(30).toFixed(1)}" x2="${w-pr}" y2="${Y(30).toFixed(1)}" stroke="${PAL.menthe}" stroke-width="1" stroke-dasharray="4 3"/>`:"";
-  const zero = (0>=lo&&0<=hi)?`<line x1="${pl}" y1="${Y(0).toFixed(1)}" x2="${w-pr}" y2="${Y(0).toFixed(1)}" stroke="var(--border)" stroke-width="1"/>`:"";
-  return `<svg width="100%" viewBox="0 0 ${w} ${h}" style="max-width:100%">${yTicks}${zero}${target}
-    <polyline fill="none" stroke="${PAL.blue}" stroke-width="2.5" points="${line}"/>${dots}${labels}</svg>`;
+// statut/pill dérivés
+function stScore(v){ return v==null?["flat","—"]: v>=30?["good","Bon"]: v>=0?["warn","Correct"]:["bad","À redresser"]; }
+function stCsat(v){ return v==null?["flat","—"]: v>=4?["good","Bon"]: v>=3?["warn","Moyen"]:["bad","Faible"]; }
+function stTaux(v){ return v==null?["flat","—"]: v>=15?["good","Bon"]: v>=10?["warn","Moyen"]:["bad","Faible"]; }
+function stDelai(v){ return v==null?["flat","—"]: v<=30?["good","Dans l'objectif"]: v<=40?["warn","À surveiller"]:["bad","Trop long"]; }
+const stCol=s=>({good:cssv("--good"),warn:cssv("--warn"),bad:cssv("--bad"),brand:cssv("--mauve"),flat:cssv("--muted")}[s]);
+
+// delta {invert:true si baisse = mieux}
+function deltaTag(cur,prev,opt={}){
+  if(cur==null||prev==null) return `<span class="trendtag flat">—</span>`;
+  const d=cur-prev, eps=opt.eps??0.05, unit=opt.unit||"";
+  const better = opt.invert? d<-eps : d>eps;
+  const worse  = opt.invert? d>eps  : d<-eps;
+  const cls=better?"up":worse?"down":"flat";
+  const arr=Math.abs(d)<=eps?"=":(d>0?"▲":"▼");
+  const val=(d>0?"+":"")+ (Number.isInteger(d)?d:d.toFixed(1).replace(".",","));
+  return `<span class="trendtag ${cls}">${arr} ${val}${unit} <span class="vs">vs ${moisCourt(prevCamp)}</span></span>`;
 }
 
-// ============================ AUTH GATE ============================
-async function boot() {
-  const { data } = await sb.auth.getSession();
-  setAuth(!!data.session, data.session?.user?.email);
+// ---- SVG : lissage + sparkline + infobulle ----
+function smooth(P){
+  if(P.length<3) return "M"+P.map(p=>p.join(",")).join(" L");
+  let d="M"+P[0][0].toFixed(1)+","+P[0][1].toFixed(1);
+  for(let i=0;i<P.length-1;i++){
+    const p0=P[i-1]||P[i],p1=P[i],p2=P[i+1],p3=P[i+2]||p2;
+    const c1x=p1[0]+(p2[0]-p0[0])/6,c1y=p1[1]+(p2[1]-p0[1])/6;
+    const c2x=p2[0]-(p3[0]-p1[0])/6,c2y=p2[1]-(p3[1]-p1[1])/6;
+    d+=` C ${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+  }
+  return d;
 }
-function setAuth(logged, email) {
-  $("#gate").style.display = logged?"none":"flex";
-  $("#app").style.display  = logged?"block":"none";
-  currentUserEmail = email||null;
-  $("#who").textContent = email||"";
-  if (logged) loadDashboard();
+let spN=0;
+function sparkline(vals,color){
+  const clean=vals.filter(v=>v!=null);
+  if(clean.length<2) return "";
+  const w=116,h=38,pad=4,n=vals.length, mn=Math.min(...clean),mx=Math.max(...clean),rg=(mx-mn)||1;
+  const idxs=vals.map((v,i)=>v==null?null:[pad+i/(n-1)*(w-2*pad),(h-pad)-((v-mn)/rg)*(h-2*pad-3)]).filter(Boolean);
+  const line=smooth(idxs);
+  const area=line+` L ${idxs[idxs.length-1][0].toFixed(1)},${h-.5} L ${idxs[0][0].toFixed(1)},${h-.5} Z`;
+  const id="sp"+(++spN),last=idxs[idxs.length-1];
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="overflow:visible">
+    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${color}" stop-opacity=".22"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>
+    <path d="${area}" fill="url(#${id})"/>
+    <path d="${line}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="2.8" fill="${color}" stroke="var(--surface)" stroke-width="1.6"/></svg>`;
+}
+const ttEl=document.createElement("div"); ttEl.className="tt"; document.body.appendChild(ttEl);
+document.addEventListener("mousemove",e=>{
+  const t=e.target.closest?e.target.closest("[data-tip]"):null;
+  if(!t){ ttEl.classList.remove("on"); return; }
+  ttEl.innerHTML=t.getAttribute("data-tip"); ttEl.classList.add("on");
+  let x=e.clientX+14,y=e.clientY+16; const r=ttEl.getBoundingClientRect();
+  if(x+r.width>innerWidth-8)x=e.clientX-r.width-14; if(y+r.height>innerHeight-8)y=e.clientY-r.height-16;
+  ttEl.style.left=x+"px"; ttEl.style.top=y+"px";
+});
+function tile(k){
+  const c=stCol(k.st);
+  return `<div class="card kpi">
+    <div class="top"><div><div class="lbl">${esc(k.lbl)}</div><div class="sig">${esc(k.sig)}</div></div>
+      <span class="pill" style="background:color-mix(in srgb,${c} 15%,transparent);color:${c}">${esc(k.pill)}</span></div>
+    <div class="v"><span class="n num" style="color:${c}">${k.n}</span>${k.u?`<span class="u">${k.u}</span>`:""}</div>
+    <div class="row"><span class="ctx">${k.ctx||"&nbsp;"}</span>${k.delta||""}</div>
+    ${k.spark?`<div style="margin-top:10px">${k.spark}</div>`:""}</div>`;
+}
+
+// ============================ AUTH ============================
+async function boot(){ const {data}=await sb.auth.getSession(); setAuth(!!data.session, data.session?.user?.email); }
+function setAuth(logged,email){
+  $("#gate").style.display=logged?"none":"flex"; $("#app").style.display=logged?"block":"none";
+  currentUserEmail=email||null; $("#who").textContent=email||"";
+  if(logged) loadDashboard();
 }
 $("#gate-btn").addEventListener("click", async ()=>{
-  const email=$("#gate-email").value.trim(), password=$("#gate-pass").value;
-  $("#gate-err").innerHTML="";
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
-  if (error) { $("#gate-err").innerHTML=`<div class="notice err">${esc(error.message)}</div>`; return; }
-  setAuth(true, data.user?.email);
+  const email=$("#gate-email").value.trim(), password=$("#gate-pass").value; $("#gate-err").innerHTML="";
+  const {data,error}=await sb.auth.signInWithPassword({email,password});
+  if(error){ $("#gate-err").innerHTML=`<div class="notice err">${esc(error.message)}</div>`; return; }
+  setAuth(true,data.user?.email);
 });
-$("#gate-pass").addEventListener("keydown", e=>{ if(e.key==="Enter") $("#gate-btn").click(); });
+$("#gate-pass").addEventListener("keydown",e=>{ if(e.key==="Enter")$("#gate-btn").click(); });
 $("#logout").addEventListener("click", async ()=>{ await sb.auth.signOut(); setAuth(false); });
+$("#themeBtn").addEventListener("click",()=>{ const r=document.documentElement;
+  const cur=r.getAttribute("data-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");
+  r.setAttribute("data-theme",cur==="dark"?"light":"dark"); if($("#app").style.display!=="none") renderAll(); });
 
-// tabs
-document.querySelectorAll(".tab").forEach(t=> t.addEventListener("click", ()=>{
-  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
-  document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
-  t.classList.add("active");
-  $("#view-"+t.dataset.view).classList.add("active");
-  if (t.dataset.view==="prospection") loadLeads();
-  if (t.dataset.view==="requete") { const m=new Date().toISOString().slice(0,7);
-    if(!$("#r-campagne").value) $("#r-campagne").value=m; if(!$("#s-campagne").value) $("#s-campagne").value=m; }
-}));
+// onglets
+$("#tabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return;
+  document.querySelectorAll("#tabs button").forEach(x=>x.classList.remove("on")); b.classList.add("on");
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  $("#view-"+b.dataset.view).classList.add("active");
+  if(b.dataset.view==="prospection") loadLeads();
+  if(b.dataset.view==="requete"){ const m=new Date().toISOString().slice(0,7);
+    ["#r-campagne","#s-campagne","#d-campagne"].forEach(s=>{ if(!$(s).value)$(s).value=m; }); }
+});
 
-// ============================ DASHBOARD (Satisfaction) ============================
-const D = {}; // caches
-async function loadDashboard() {
-  const q = (t,cols,opts={}) => sb.from(t).select(cols).then(r=>r.data||[]);
-  const [reseau, zones, agences, conseillers, taux, verbatims, agTable, motifs, rs] = await Promise.all([
-    sb.from("v_satisfaction_reseau").select("*").then(r=>r.data||[]),
-    sb.from("v_satisfaction_zone").select("*").then(r=>r.data||[]),
-    sb.from("v_satisfaction_agence").select("*").then(r=>r.data||[]),
-    sb.from("v_satisfaction_conseiller").select("*").then(r=>r.data||[]),
-    sb.from("v_taux_reponse").select("*").then(r=>r.data||[]),
-    sb.from("v_verbatims").select("*").order("date_reponse",{ascending:false}).limit(300).then(r=>r.data||[]),
-    sb.from("agences").select("nom,zone").then(r=>r.data||[]),
-    sb.from("v_satisfaction_motif").select("*").then(r=>r.data||[]),
-    sb.from("v_reseaux_sociaux").select("*").then(r=>r.data||[]),
+// ============================ DASHBOARD ============================
+const D={}; let camp=null, prevCamp=null, granLevel="global";
+async function loadDashboard(){
+  const q=(t,order)=>{ let r=sb.from(t).select("*"); if(order) r=r.order(order.col,{ascending:order.asc}); return r.then(x=>x.data||[]); };
+  const [reseau,zones,agences,conseillers,taux,verbatims,motifs,rs,sinistres]=await Promise.all([
+    q("v_satisfaction_reseau"), q("v_satisfaction_zone"), q("v_satisfaction_agence"), q("v_satisfaction_conseiller"),
+    q("v_taux_reponse"), sb.from("v_verbatims").select("*").order("date_reponse",{ascending:false}).limit(300).then(x=>x.data||[]),
+    q("v_satisfaction_motif"), q("v_reseaux_sociaux"), q("v_sinistres_reseau"),
   ]);
-  D.reseau=reseau; D.zones=zones; D.conseillers=conseillers; D.taux=taux; D.verbatims=verbatims; D.motifs=motifs; D.rs=rs;
-  // agence view : normaliser nps_score -> score_nps + rattacher zone + taux
-  const zoneByNom={}; agTable.forEach(a=>zoneByNom[a.nom]=a.zone);
-  const tauxKey={}; taux.forEach(t=>tauxKey[t.campagne+"|"+t.agence]=t.taux_reponse);
-  D.agences = agences.map(a=>({ ...a, score_nps:a.nps_score, zone:zoneByNom[a.agence]||"—",
-    taux_reponse: tauxKey[a.campagne+"|"+a.agence] ?? null }));
-
-  D.campagnes = [...new Set(reseau.map(r=>r.campagne).filter(Boolean))].sort();
-  const hasData = D.campagnes.length>0;
-  $("#sat-body").style.display = hasData?"block":"none";
-  $("#sat-empty").style.display = hasData?"none":"block";
-  if (!hasData) return;
-
-  // filtres
-  const fc=$("#f-campagne"); fc.innerHTML=D.campagnes.map(c=>`<option>${c}</option>`).join("");
+  D.reseau=reseau; D.zones=zones; D.agences=agences; D.conseillers=conseillers; D.taux=taux;
+  D.verbatims=verbatims; D.motifs=motifs; D.rs=rs; D.sinistres=sinistres;
+  D.tauxKey={}; taux.forEach(t=>D.tauxKey[t.campagne+"|"+t.agence]=t.taux_reponse);
+  D.campagnes=[...new Set(reseau.map(r=>r.campagne).filter(Boolean))].sort();
+  const has=D.campagnes.length>0;
+  $("#sat-body").style.display=has?"block":"none"; $("#sat-empty").style.display=has?"none":"block";
+  if(!has) return;
+  const fc=$("#f-campagne"); fc.innerHTML=D.campagnes.map(c=>`<option value="${c}">${c}</option>`).join("");
   fc.value=D.campagnes[D.campagnes.length-1];
-  const zoneVals=[...new Set(D.agences.map(a=>a.zone).filter(z=>z&&z!=="—"))].sort();
-  $("#f-zone").innerHTML='<option value="">Toutes</option>'+zoneVals.map(z=>`<option>${esc(z)}</option>`).join("");
-  const agVals=[...new Set(D.agences.map(a=>a.agence).filter(Boolean))].sort();
-  $("#f-agence").innerHTML='<option value="">Toutes</option>'+agVals.map(a=>`<option>${esc(a)}</option>`).join("");
-  renderDashboard();
+  renderAll();
 }
-["#f-campagne","#f-zone","#f-agence"].forEach(s=> $(s).addEventListener("change", renderDashboard));
-$("#sat-refresh").addEventListener("click", loadDashboard);
+$("#f-campagne").addEventListener("change",renderAll);
+$("#sat-refresh").addEventListener("click",loadDashboard);
+$("#granseg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return;
+  document.querySelectorAll("#granseg button").forEach(x=>x.classList.remove("on")); b.classList.add("on");
+  granLevel=b.dataset.g; renderBD(); });
 
-function delta(cur, prev) {
-  if (cur==null||prev==null) return `<span class="delta flat">—</span>`;
-  const d=cur-prev, cls=d>0.05?"up":d<-0.05?"down":"flat", arr=d>0.05?"▲":d<-0.05?"▼":"=";
-  return `<span class="delta ${cls}">${arr} ${d>0?"+":""}${d.toFixed(1)}</span>`;
+const serie=f=>D.campagnes.map(c=>{ const r=D.reseau.find(x=>x.campagne===c); return r?r[f]:null; });
+const rowFor=c=>D.reseau.find(x=>x.campagne===c)||{};
+const sinRowFor=c=>D.motifs.find(x=>x.campagne===c && x.motif==="sinistre");
+const sinDelaiFor=c=>D.sinistres.find(x=>x.campagne===c);
+
+function renderAll(){
+  camp=$("#f-campagne").value; const idx=D.campagnes.indexOf(camp);
+  prevCamp= idx>0 ? D.campagnes[idx-1] : null;
+  renderHero(); renderKPIs(); renderSinistre(); renderBD(); renderTrend(); renderAgences(); renderVerbatims();
 }
-function tile(lbl,val,deltaHtml,foot,spark) {
-  return `<div class="card kpi"><div class="lbl">${lbl}</div>
-    <div class="val num">${val} ${deltaHtml||""}</div>
-    <div class="foot">${foot||"&nbsp;"}</div>${spark?`<div class="spark">${spark}</div>`:""}</div>`;
+
+function renderHero(){
+  const r=rowFor(camp); const s=r.score_nps;
+  $("#h-score").textContent=(s==null?"—":(s>0?"+":"")+s); $("#h-score").style.color=scoreColor(s);
+  const [st,verd]=stScore(s), c=stCol(st);
+  const rp=rowFor(prevCamp);
+  $("#h-side").innerHTML=`
+    <div class="verdict" style="background:color-mix(in srgb,${c} 16%,transparent);color:${c}">
+      <span class="ic" style="background:${c}"></span>${verd}</div>
+    <div>${deltaTag(s, prevCamp?rp.score_nps:null, {unit:" pts"})}</div>`;
+  const pos=s==null?50:Math.max(0,Math.min(100,(s+100)/2));
+  $("#h-mark").style.left=pos+"%";
+  $("#h-foot").innerHTML=`Sur <b>${r.reponses||0} réponses</b> : <b style="color:var(--good)">${r.promoteurs||0} promoteurs</b>, ${r.passifs||0} passifs, <b style="color:var(--bad)">${r.detracteurs||0} détracteurs</b>.`;
+  // composition
+  const tot=(r.promoteurs||0)+(r.passifs||0)+(r.detracteurs||0)||1;
+  const seg=(n,col,lbl,plage)=> n?`<div style="flex:${n}; background:${col}" data-tip="<b>${lbl}</b> — ${plage}<br>${n} réponses · ${Math.round(100*n/tot)}%">${Math.round(100*n/tot)}%</div>`:"";
+  $("#compo").innerHTML=seg(r.promoteurs,cssv("--good"),"Promoteurs","notes 9-10")+seg(r.passifs,cssv("--warn"),"Passifs","notes 7-8")+seg(r.detracteurs,cssv("--bad"),"Détracteurs","notes 0-6");
+  $("#compo-legend").innerHTML=`
+    <span class="it"><span class="sw" style="background:var(--good)"></span>Promoteurs <b>${r.promoteurs||0}</b></span>
+    <span class="it"><span class="sw" style="background:var(--warn)"></span>Passifs <b>${r.passifs||0}</b></span>
+    <span class="it"><span class="sw" style="background:var(--bad)"></span>Détracteurs <b>${r.detracteurs||0}</b></span>`;
+  $("#compo-foot").innerHTML="Le score NPS = <b>% promoteurs − % détracteurs</b>.";
+  $("#capline").innerHTML=`Indicateurs de la campagne <b>${camp}</b> — évolutions <span class="up" style="font-weight:700">▲</span>/<span class="down" style="font-weight:700">▼</span> ${prevCamp?`vs <b>${prevCamp}</b>`:"(pas de campagne précédente)"}.`;
 }
 
-function renderDashboard() {
-  const camp=$("#f-campagne").value, fz=$("#f-zone").value, fa=$("#f-agence").value;
-  const idx=D.campagnes.indexOf(camp);
-  const r = D.reseau.find(x=>x.campagne===camp) || {};
-  const rPrev = idx>0 ? D.reseau.find(x=>x.campagne===D.campagnes[idx-1]) : null;
-  const serie = f => D.campagnes.map(c=>{ const row=D.reseau.find(x=>x.campagne===c); return row?row[f]:null; });
+function renderKPIs(){
+  const r=rowFor(camp), rp=rowFor(prevCamp), rsRow=(D.rs.find(x=>x.campagne===camp)||{}), rsPrev=(D.rs.find(x=>x.campagne===prevCamp)||{});
+  const K=[];
+  let [st,pill]=stCsat(r.csat_global);
+  K.push({lbl:"Satisfaction globale",sig:"moyenne /5",n:fmt(r.csat_global,1),u:"/5",st,pill,ctx:"note moyenne des réponses",delta:deltaTag(r.csat_global,prevCamp?rp.csat_global:null),spark:sparkline(serie("csat_global"),stCol(st))});
+  [st,pill]=stCsat(r.csat_conseiller);
+  K.push({lbl:"Qualité du conseiller",sig:"écoute, clarté",n:fmt(r.csat_conseiller,1),u:"/5",st,pill,ctx:"note du conseiller",delta:deltaTag(r.csat_conseiller,prevCamp?rp.csat_conseiller:null),spark:sparkline(serie("csat_conseiller"),stCol(st))});
+  [st,pill]=stTaux(r.taux_reponse);
+  K.push({lbl:"Taux de réponse",sig:"participation",n:r.taux_reponse==null?"—":Math.round(r.taux_reponse),u:"%",st,pill,ctx:`${r.reponses||0} rép. / ${r.envoyes||0} env.`,delta:deltaTag(r.taux_reponse,prevCamp?rp.taux_reponse:null,{unit:" pts"}),spark:sparkline(serie("taux_reponse"),stCol(st))});
+  [st,pill]=stTaux(r.taux_consentement);
+  K.push({lbl:"Recontacts acceptés",sig:"leads générés",n:r.taux_consentement==null?"—":Math.round(r.taux_consentement),u:"%",st,pill,ctx:`${r.consentements||0} leads`,delta:deltaTag(r.taux_consentement,prevCamp?rp.taux_consentement:null,{unit:" pts"}),spark:sparkline(serie("taux_consentement"),stCol(st))});
+  K.push({lbl:"Suivi réseaux sociaux",sig:"notoriété",n:rsRow.taux_suivi==null?"—":Math.round(rsRow.taux_suivi),u:"%",st:"brand",pill:"Notoriété",ctx:`${rsRow.suit||0} / ${rsRow.repondu||0} répondants`,delta:deltaTag(rsRow.taux_suivi,prevCamp?rsPrev.taux_suivi:null,{unit:" pts"}),spark:sparkline(D.campagnes.map(c=>{const x=D.rs.find(y=>y.campagne===c);return x?x.taux_suivi:null;}),cssv("--mauve"))});
+  $("#kpis").innerHTML=K.map(tile).join("");
+}
 
-  // KPI
-  $("#kpis").innerHTML = [
-    tile("Score NPS", `<span style="color:${scoreColor(r.score_nps)}">${r.score_nps??"—"}</span>`,
-      delta(r.score_nps, rPrev?.score_nps), `${r.promoteurs||0} prom. · ${r.detracteurs||0} détr.`, sparkline(serie("score_nps"),{color:PAL.blue})),
-    tile("NPS moyen", fmt(r.nps_moyen,1), delta(r.nps_moyen,rPrev?.nps_moyen), "sur 10", sparkline(serie("nps_moyen"),{color:PAL.ciel})),
-    tile("CSAT global", fmt(r.csat_global,2), delta(r.csat_global,rPrev?.csat_global), "sur 5", sparkline(serie("csat_global"),{color:PAL.menthe})),
-    tile("CSAT conseiller", fmt(r.csat_conseiller,2), delta(r.csat_conseiller,rPrev?.csat_conseiller), "sur 5", sparkline(serie("csat_conseiller"),{color:PAL.mauve})),
-    tile("Taux de réponse", pct(r.taux_reponse), "", `${r.reponses||0} rép. / ${r.envoyes||0} env.`, sparkline(serie("taux_reponse"),{color:PAL.moutarde})),
-    tile("Consentement", pct(r.taux_consentement), "", `${r.consentements||0} leads générés`, sparkline(serie("taux_consentement"),{color:PAL.corail})),
-    (()=>{ const rs=(D.rs||[]).find(x=>x.campagne===camp)||{};
-      const rsSerie=D.campagnes.map(c=>{ const row=(D.rs||[]).find(x=>x.campagne===c); return row?row.taux_suivi:null; });
-      return tile("Réseaux sociaux", pct(rs.taux_suivi), "", `${pct(rs.taux_interet)} intéressés · ${rs.suit||0}/${rs.repondu||0}`, sparkline(rsSerie,{color:PAL.mauve})); })(),
-  ].join("");
+function renderSinistre(){
+  const sr=sinRowFor(camp), srp=sinRowFor(prevCamp), sd=sinDelaiFor(camp)||{}, sdp=sinDelaiFor(prevCamp)||{};
+  if(!sr && !(sd&&sd.n_clos)){ $("#sin-kpis").innerHTML=`<div class="empty" style="grid-column:1/-1">Pas encore de réponses « sinistre » pour cette campagne. Importez la liste des sinistres clos dans l'onglet Administration.</div>`; $("#sin-insight").innerHTML=""; return; }
+  const K=[];
+  let [st,pill]=stScore(sr?.score_nps);
+  K.push({lbl:"Recommandation sinistre",sig:"NPS · indemnisés",n:sr?.score_nps==null?"—":(sr.score_nps>0?"+":"")+sr.score_nps,u:"",st,pill:pill,ctx:`réseau : ${(rowFor(camp).score_nps??"—")}`,delta:deltaTag(sr?.score_nps,prevCamp?srp?.score_nps:null,{unit:" pts"})});
+  [st,pill]=stCsat(sr?.csat_sinistre);
+  K.push({lbl:"Gestion du sinistre",sig:"satisfaction /5",n:fmt(sr?.csat_sinistre,1),u:"/5",st,pill,ctx:"prise en charge, suivi",delta:deltaTag(sr?.csat_sinistre,prevCamp?srp?.csat_sinistre:null)});
+  [st,pill]=stCsat(sr?.delai_indemnisation);
+  K.push({lbl:"Délai d'indemnisation ressenti",sig:"note du client /5",n:fmt(sr?.delai_indemnisation,1),u:"/5",st,pill,ctx:"perception de la rapidité",delta:deltaTag(sr?.delai_indemnisation,prevCamp?srp?.delai_indemnisation:null)});
+  [st,pill]=stDelai(sd.delai_reel);
+  K.push({lbl:"Délai réel moyen",sig:"clôture − ouverture",n:sd.delai_reel==null?"—":Math.round(sd.delai_reel),u:"j",st,pill,ctx:"objectif < 30 jours",delta:deltaTag(sd.delai_reel,prevCamp?sdp.delai_reel:null,{unit:" j",invert:true})});
+  K.push({lbl:"Sinistres interrogés",sig:"volume",n:sd.n_clos??(sr?.reponses||0),u:"",st:"brand",pill:"Sinistres clos",ctx:`${sr?.reponses||0} réponses`,delta:""});
+  $("#sin-kpis").innerHTML=K.map(tile).join("");
+  const dr=sd.delai_reel, dp=sr?.delai_indemnisation;
+  $("#sin-insight").innerHTML= (dr!=null||dp!=null)
+    ? `<b>Perçu vs réel</b> — délai ressenti <b>${fmt(dp,1)}/5</b>${dr!=null?` pour un traitement réel moyen de <b>${Math.round(dr)} j</b> (objectif 30)`:""}. Le NPS sinistre (${sr?.score_nps==null?"—":(sr.score_nps>0?"+":"")+sr.score_nps}) est à comparer au réseau (${rowFor(camp).score_nps??"—"}) : l'indemnisation est un levier clé.`
+    : "";
+}
 
-  // Tendance + composition
-  $("#chart-nps").innerHTML = lineChartNPS(D.campagnes.map(c=>({campagne:c, score:(D.reseau.find(x=>x.campagne===c)||{}).score_nps ?? null})));
-  $("#chart-compo").innerHTML = D.campagnes.slice(-6).map(c=>{
-    const x=D.reseau.find(v=>v.campagne===c)||{}; const tot=(x.promoteurs||0)+(x.passifs||0)+(x.detracteurs||0)||1;
-    const seg=(n,col)=> n?`<span style="width:${100*n/tot}%;background:${col}"></span>`:"";
-    return `<div class="row"><span class="faint">${esc(c.slice(2))}</span>
-      <div class="bar">${seg(x.promoteurs,PAL.menthe)}${seg(x.passifs,PAL.moutarde)}${seg(x.detracteurs,PAL.corail)}</div></div>`;
-  }).join("") + `<div class="row" style="margin-top:6px"><span></span><div style="font-size:11px;color:var(--muted)">
-    <span class="dot" style="background:${PAL.menthe}"></span>Prom. <span class="dot" style="background:${PAL.moutarde}"></span>Passifs <span class="dot" style="background:${PAL.corail}"></span>Détr.</div></div>`;
+function renderBD(){
+  const r=rowFor(camp), sr=sinRowFor(camp), sd=sinDelaiFor(camp)||{};
+  let rows=[], hdr="Réseau", sub="";
+  const norm2=x=>({name:x.name,sub:x.sub,n:x.n,score:x.score,csat:x.csat,csatSin:x.csatSin,delai:x.delai,taux:x.taux});
+  if(granLevel==="global"){ hdr="Réseau"; sub="Vue d'ensemble du réseau";
+    rows=[norm2({name:"Réseau ANSET",n:r.reponses,score:r.score_nps,csat:r.csat_global,csatSin:sr?.csat_sinistre,delai:sd.delai_reel,taux:r.taux_reponse})]; }
+  else if(granLevel==="zone"){ hdr="Zone"; const z=D.zones.filter(x=>x.campagne===camp&&x.zone); sub=`${z.length} zone(s)`;
+    rows=z.map(x=>norm2({name:x.zone,n:x.reponses,score:x.score_nps,csat:x.csat_global,csatSin:x.csat_sinistre,delai:x.delai_reel,taux:x.taux_reponse})); }
+  else if(granLevel==="agence"){ hdr="Agence"; const a=D.agences.filter(x=>x.campagne===camp); sub=`${a.length} agence(s) · triées par score`;
+    rows=a.map(x=>norm2({name:x.agence,n:x.reponses,score:x.nps_score,csat:x.csat_global,csatSin:x.csat_sinistre,delai:x.delai_reel,taux:D.tauxKey[camp+"|"+x.agence]})); }
+  else { hdr="Conseiller"; const c=D.conseillers.filter(x=>x.campagne===camp); sub=`${c.length} conseiller(s)`;
+    rows=c.map(x=>norm2({name:x.conseiller_nom||x.conseiller_id,sub:x.agence,n:x.reponses,score:x.score_nps,csat:x.csat_global,csatSin:x.csat_sinistre,delai:x.delai_reel,taux:x.taux_reponse})); }
+  rows.sort((a,b)=>(b.score??-999)-(a.score??-999));
+  $("#gran-sub").textContent=`Campagne ${camp} · ${sub}`;
+  const head=`<thead><tr><th>${hdr}</th><th>Réponses</th><th>Score NPS</th><th>Satisfaction</th><th>Sat. sinistre</th><th>Délai réel</th><th>Taux rép.</th></tr></thead>`;
+  const body=rows.length? rows.map(x=>{
+    const nm=x.sub?`${esc(x.name)} <span class="agc">${esc(x.sub)}</span>`:esc(x.name);
+    return `<tr><td>${nm}</td><td class="num">${x.n??0}</td>
+      <td><span class="cchip" style="background:color-mix(in srgb,${scoreColor(x.score)} 16%,transparent);color:${scoreColor(x.score)}">${x.score==null?"—":(x.score>0?"+":"")+x.score}</span></td>
+      <td class="num" style="color:${csatColor(x.csat)}">${fmt(x.csat,1)}</td>
+      <td class="num" style="color:${csatColor(x.csatSin)}">${fmt(x.csatSin,1)}</td>
+      <td class="num" style="color:${delaiColor(x.delai)}">${x.delai==null?"—":Math.round(x.delai)+" j"}</td>
+      <td class="num" style="color:${tauxColor(x.taux)}">${x.taux==null?"—":Math.round(x.taux)+" %"}</td></tr>`;
+  }).join("") : `<tr><td colspan="7" class="empty">Aucune donnée.</td></tr>`;
+  $("#bd").innerHTML=head+"<tbody>"+body+"</tbody>";
+}
 
-  // Zones (campagne)
-  const zrows=D.zones.filter(z=>z.campagne===camp && z.zone).sort((a,b)=>(b.score_nps??-999)-(a.score_nps??-999));
-  const moy=r.score_nps;
-  $("#zones").innerHTML = zrows.length? zrows.map(z=>{
-    const v=z.score_nps??0; const wpos=Math.max(0,Math.min(100,(v+100)/2));
-    return `<div class="hbar"><span>${esc(z.zone)} <span class="faint">(${z.reponses})</span></span>
-      <div class="track"><div class="fill" style="width:${wpos}%;background:${scoreColor(z.score_nps)}"></div></div>
-      <span class="num" style="text-align:right;color:${scoreColor(z.score_nps)};font-weight:700">${z.score_nps??"—"}</span></div>`;
-  }).join("") + (moy!=null?`<div class="faint" style="font-size:11.5px;margin-top:6px">Moyenne réseau : <b>${moy}</b></div>`:"") : '<div class="empty">—</div>';
+function renderTrend(){
+  const data=D.campagnes.map(c=>({c,m:moisCourt(c),v:(rowFor(c).score_nps)})).filter(d=>d.v!=null);
+  const cont=$("#chart-trend");
+  if(data.length<1){ cont.innerHTML='<div class="empty">Pas encore de données.</div>'; return; }
+  const w=560,h=214,pl=30,pr=16,pt=18,pb=28,n=data.length,target=30;
+  const vals=data.map(d=>d.v).concat([0,30]); let lo=Math.min(...vals),hi=Math.max(...vals); const pad=(hi-lo)*.15||10; lo-=pad; hi+=pad;
+  const X=i=> pl+(n<=1?0:i/(n-1))*(w-pl-pr);
+  const Y=v=> pt+(1-(v-lo)/((hi-lo)||1))*(h-pt-pb);
+  const P=data.map((d,i)=>[X(i),Y(d.v)]);
+  const line=smooth(P), area=line+` L ${X(n-1).toFixed(1)},${Y(lo).toFixed(1)} L ${X(0).toFixed(1)},${Y(lo).toFixed(1)} Z`;
+  const gy=[lo,(lo+hi)/2,hi].map(v=>`<line x1="${pl}" y1="${Y(v).toFixed(1)}" x2="${w-pr}" y2="${Y(v).toFixed(1)}" stroke="var(--border)"/><text x="${pl-6}" y="${(Y(v)+3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--faint)">${v.toFixed(0)}</text>`).join("");
+  const dots=data.map((d,i)=>`<circle cx="${X(i).toFixed(1)}" cy="${Y(d.v).toFixed(1)}" r="${i===n-1?5:3.5}" fill="${i===n-1?'var(--good)':'var(--blue)'}" stroke="var(--surface)" stroke-width="2"/>`).join("");
+  const xlbl=data.map((d,i)=>`<text x="${X(i).toFixed(1)}" y="${h-8}" text-anchor="middle" font-size="11" fill="var(--muted)">${d.m}</text>`).join("");
+  const step=n>1?(w-pl-pr)/(n-1):(w-pl-pr);
+  const hits=data.map((d,i)=>{const prev=i>0?data[i-1].v:null,dd=prev==null?"":(d.v-prev>=0?`▲ +${d.v-prev}`:`▼ ${d.v-prev}`);
+    return `<rect x="${(X(i)-step/2).toFixed(1)}" y="${pt}" width="${step.toFixed(1)}" height="${(h-pt-pb).toFixed(1)}" fill="transparent" data-i="${i}" data-tip="<b>${d.c}</b><br>Score NPS <b>${d.v>0?'+':''}${d.v}</b>${prev!=null?` · ${dd}`:''}"/>`;}).join("");
+  const tgt=(target>=lo&&target<=hi)?`<line x1="${pl}" y1="${Y(target).toFixed(1)}" x2="${w-pr}" y2="${Y(target).toFixed(1)}" stroke="var(--good)" stroke-width="1.5" stroke-dasharray="5 4"/><text x="${w-pr}" y="${(Y(target)-6).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--good)" font-weight="700">Objectif 30</text>`:"";
+  cont.innerHTML=`<svg width="100%" viewBox="0 0 ${w} ${h}" style="max-width:100%; overflow:visible">
+    <defs><linearGradient id="gl" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="var(--blue)"/><stop offset="1" stop-color="var(--mauve)"/></linearGradient>
+      <linearGradient id="ga" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--mauve)" stop-opacity=".18"/><stop offset="1" stop-color="var(--blue)" stop-opacity="0"/></linearGradient></defs>
+    ${gy}${tgt}<path d="${area}" fill="url(#ga)"/><path d="${line}" fill="none" stroke="url(#gl)" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"/>
+    <line id="trc" x1="0" y1="${pt}" x2="0" y2="${(h-pb).toFixed(1)}" stroke="var(--muted)" stroke-dasharray="3 3" style="display:none"/>
+    <circle id="trh" r="6.5" fill="none" stroke="var(--blue)" stroke-width="2" style="display:none"/>
+    ${dots}${xlbl}${hits}</svg>`;
+  const cr=cont.querySelector("#trc"), hl=cont.querySelector("#trh");
+  cont.querySelectorAll("rect[data-i]").forEach(rc=>rc.addEventListener("mouseenter",()=>{const i=+rc.dataset.i;
+    cr.setAttribute("x1",X(i));cr.setAttribute("x2",X(i));cr.style.display="";hl.setAttribute("cx",X(i));hl.setAttribute("cy",Y(data[i].v));hl.style.display="";}));
+  cont.addEventListener("mouseleave",()=>{cr.style.display="none";hl.style.display="none";});
+}
 
-  // Agences (campagne, filtre zone)
-  let arows=D.agences.filter(a=>a.campagne===camp && (!fz||a.zone===fz));
-  arows.sort((a,b)=>(b.score_nps??-999)-(a.score_nps??-999));
-  $("#ag-sub").textContent = `Campagne ${camp}${fz?" · zone "+fz:""} · trié par Score NPS`;
-  const agSerie = ag => D.campagnes.map(c=>{ const row=D.agences.find(x=>x.campagne===c&&x.agence===ag); return row?row.score_nps:null; });
-  $("#t-agences").innerHTML = `<thead><tr>
-    <th>Agence</th><th>Zone</th><th class="n">n</th><th class="n">Tx rép.</th><th class="n">Score NPS</th>
-    <th class="n">NPS moy</th><th class="n">CSAT glob</th><th class="n">CSAT cons</th><th>12 mois</th></tr></thead><tbody>`+
-    (arows.length? arows.map(a=>{
-      const prev=idx>0?D.agences.find(x=>x.campagne===D.campagnes[idx-1]&&x.agence===a.agence):null;
-      return `<tr><td><b>${esc(a.agence)}</b></td><td class="faint">${esc(a.zone)}</td>
-        <td class="n">${a.reponses}</td>
-        <td class="n" style="color:${tauxColor(a.taux_reponse)}">${pct(a.taux_reponse)}</td>
-        <td class="n" style="font-weight:700"><span class="dot" style="background:${scoreColor(a.score_nps)}"></span>${a.score_nps??"—"} ${delta(a.score_nps,prev?.score_nps)}</td>
-        <td class="n">${fmt(a.nps_moyen,1)}</td>
-        <td class="n" style="color:${csatColor(a.csat_global)}">${fmt(a.csat_global,2)}</td>
-        <td class="n" style="color:${csatColor(a.csat_conseiller)}">${fmt(a.csat_conseiller,2)}</td>
-        <td>${sparkline(agSerie(a.agence),{color:scoreColor(a.score_nps)})}</td></tr>`;
-    }).join("") : `<tr><td colspan="9" class="empty">Aucune donnée.</td></tr>`)+`</tbody>`;
+function renderAgences(){
+  const ag=D.agences.filter(x=>x.campagne===camp).map(x=>({a:x.agence,v:x.nps_score,n:x.reponses}))
+    .filter(x=>x.v!=null).sort((a,b)=>b.v-a.v);
+  $("#bars-sub").textContent=`Campagne ${camp} · score NPS`;
+  if(!ag.length){ $("#bars").innerHTML='<div class="empty">Aucune donnée agence.</div>'; return; }
+  $("#bars").innerHTML=ag.map(d=>{ const posPct=(d.v+100)/2, left=Math.min(50,posPct), width=Math.abs(posPct-50);
+    const verd=d.v<0?"à redresser":d.v<30?"correct":"bon";
+    return `<div class="bar" data-tip="<b>${esc(d.a)}</b><br>Score NPS ${d.v>0?'+':''}${d.v} · ${verd}<br>${d.n} réponses">
+      <span>${esc(d.a)}</span>
+      <div class="track"><div class="zero" style="left:50%"></div><div class="fill" style="left:${left}%;width:${width}%;background:${scoreColor(d.v)}"></div></div>
+      <span class="val num" style="color:${scoreColor(d.v)}">${d.v>0?'+':''}${d.v}</span></div>`;
+  }).join("");
+}
 
-  // Conseillers (campagne, filtre zone/agence)
-  let crows=D.conseillers.filter(c=>c.campagne===camp && (!fa||c.agence===fa) && (!fz|| (D.agences.find(a=>a.agence===c.agence)?.zone)===fz));
-  crows.sort((a,b)=>(b.score_nps??-999)-(a.score_nps??-999));
-  $("#cons-sub").textContent = `Campagne ${camp}${fa?" · agence "+fa:fz?" · zone "+fz:""} · trié par Score NPS`;
-  const cSerie = id => D.campagnes.map(c=>{ const row=D.conseillers.find(x=>x.campagne===c&&x.conseiller_id===id); return row?row.score_nps:null; });
-  $("#t-conseillers").innerHTML = `<thead><tr>
-    <th>Conseiller</th><th>Agence</th><th class="n">n</th><th class="n">Tx rép.</th><th class="n">Score NPS</th>
-    <th class="n">CSAT cons</th><th class="n">Leads</th><th>12 mois</th></tr></thead><tbody>`+
-    (crows.length? crows.map(c=>{
-      const prev=idx>0?D.conseillers.find(x=>x.campagne===D.campagnes[idx-1]&&x.conseiller_id===c.conseiller_id):null;
-      return `<tr><td><b>${esc(c.conseiller_nom||c.conseiller_id)}</b></td><td class="faint">${esc(c.agence||"—")}</td>
-        <td class="n">${c.reponses}</td>
-        <td class="n" style="color:${tauxColor(c.taux_reponse)}">${pct(c.taux_reponse)}</td>
-        <td class="n" style="font-weight:700"><span class="dot" style="background:${scoreColor(c.score_nps)}"></span>${c.score_nps??"—"} ${delta(c.score_nps,prev?.score_nps)}</td>
-        <td class="n" style="color:${csatColor(c.csat_conseiller)}">${fmt(c.csat_conseiller,2)}</td>
-        <td class="n">${c.consentements||0}</td>
-        <td>${sparkline(cSerie(c.conseiller_id),{color:scoreColor(c.score_nps)})}</td></tr>`;
-    }).join("") : `<tr><td colspan="8" class="empty">Pas encore de réponses rattachées à un conseiller.</td></tr>`)+`</tbody>`;
-
-  // Par motif (niveau réseau : le motif n'est pas ventilé par agence/zone)
-  const mrows=D.motifs.filter(m=>m.campagne===camp && m.motif).sort((a,b)=>(b.reponses||0)-(a.reponses||0));
-  $("#motif-sub").textContent = `Campagne ${camp} · réseau · trié par volume`;
-  $("#t-motifs").innerHTML = `<thead><tr><th>Motif</th><th class="n">n</th><th class="n">Score NPS</th><th class="n">CSAT glob</th></tr></thead><tbody>`+
-    (mrows.length? mrows.map(m=>`<tr>
-      <td><span class="dot" style="background:${MOTIF_COLORS[m.motif]||'var(--muted)'}"></span>${esc(MOTIF_LABELS[m.motif]||m.motif)}</td>
-      <td class="n">${m.reponses}</td>
-      <td class="n" style="font-weight:700;color:${scoreColor(m.score_nps)}">${m.score_nps??"—"}</td>
-      <td class="n" style="color:${csatColor(m.csat_global)}">${fmt(m.csat_global,2)}</td></tr>`).join("")
-      : `<tr><td colspan="4" class="empty">Aucun motif renseigné pour cette campagne.</td></tr>`)+`</tbody>`;
-
-  // Carte Sinistres clos (motif = sinistre de la campagne)
-  const sin=D.motifs.find(m=>m.campagne===camp && m.motif==="sinistre");
-  const sinPrev=idx>0?D.motifs.find(m=>m.campagne===D.campagnes[idx-1] && m.motif==="sinistre"):null;
-  const sinSerie=f=>D.campagnes.map(c=>{ const row=D.motifs.find(m=>m.campagne===c&&m.motif==="sinistre"); return row?row[f]:null; });
-  $("#sinistre-kpis").innerHTML = sin ? [
-    tile("Score NPS", `<span style="color:${scoreColor(sin.score_nps)}">${sin.score_nps??"—"}</span>`,
-      delta(sin.score_nps,sinPrev?.score_nps), `${sin.reponses||0} rép.`, sparkline(sinSerie("score_nps"),{color:PAL.corail})),
-    tile("Gestion du sinistre", fmt(sin.csat_sinistre,2), delta(sin.csat_sinistre,sinPrev?.csat_sinistre), "sur 5", sparkline(sinSerie("csat_sinistre"),{color:PAL.menthe})),
-    tile("Délai d'indemnisation", fmt(sin.delai_indemnisation,2), delta(sin.delai_indemnisation,sinPrev?.delai_indemnisation), "sur 5", sparkline(sinSerie("delai_indemnisation"),{color:PAL.moutarde})),
-  ].join("") : `<div class="empty">Pas encore de réponses « sinistre » pour cette campagne. Importez la liste des sinistres clos dans l'onglet Requête.</div>`;
-
-  // Verbatims (campagne + filtres)
-  let vb=D.verbatims.filter(v=>v.campagne===camp && (!fa||v.agence===fa) && (!fz||(D.agences.find(a=>a.agence===v.agence)?.zone)===fz));
-  vb.sort((a,b)=> (b.detracteur?1:0)-(a.detracteur?1:0));
-  $("#verbatims").innerHTML = vb.length? vb.slice(0,40).map(v=>`
-    <div class="vb ${v.detracteur?"det":""}">${esc(v.commentaire)}
-      <div class="meta">${esc(v.agence||"—")}${v.conseiller_id?" · "+esc(v.conseiller_id):""} · ${(v.date_reponse||"").slice(0,10)} · NPS ${v.nps??"—"} · CSAT ${v.satisfaction_globale??"—"}</div></div>`).join("")
+function renderVerbatims(){
+  let vb=D.verbatims.filter(v=>v.campagne===camp);
+  vb.sort((a,b)=>(b.detracteur?1:0)-(a.detracteur?1:0));
+  $("#verbatims").innerHTML= vb.length? vb.slice(0,40).map(v=>`
+    <div class="vb ${v.detracteur?"det":""}"><p>« ${esc(v.commentaire)} »</p>
+      <div class="meta"><span>${esc(v.agence||"—")}</span>${v.motif?`<span>${esc(MOTIF_LABELS[v.motif]||v.motif)}</span>`:""}${v.conseiller_id?`<span>${esc(v.conseiller_id)}</span>`:""}<span>${(v.date_reponse||"").slice(0,10)}</span><span>NPS ${v.nps??"—"}</span></div></div>`).join("")
     : '<div class="empty">Aucun commentaire.</div>';
-
-  // Heatmap agences × campagnes
-  const camps=D.campagnes.slice(-8);
-  const agNames=[...new Set(D.agences.filter(a=>!fz||a.zone===fz).map(a=>a.agence))].sort();
-  $("#heatmap").innerHTML = `<table class="heat"><tr><td></td>${camps.map(c=>`<td class="collbl">${esc(c.slice(2))}</td>`).join("")}</tr>`+
-    agNames.map(ag=>`<tr><td class="rowlbl">${esc(ag)}</td>`+camps.map(c=>{
-      const row=D.agences.find(x=>x.campagne===c&&x.agence===ag);
-      const v=row?row.score_nps:null;
-      return `<td>${v==null?'<div class="cell" style="background:var(--surface-2)"></div>':`<div class="cell" style="background:${scoreColor(v)}" title="${esc(ag)} ${c}: ${v}">${v}</div>`}</td>`;
-    }).join("")+`</tr>`).join("")+`</table>`;
 }
 
 // ============================ PROSPECTION ============================
 let leads=[];
 $("#p-statut").innerHTML='<option value="">Tous les statuts</option>'+STATUTS.map(s=>`<option value="${s}">${STATUT_LABELS[s]}</option>`).join("");
-["#p-statut","#p-agence","#p-search"].forEach(s=>$(s).addEventListener("input", renderLeads));
-$("#p-refresh").addEventListener("click", loadLeads);
+["#p-statut","#p-agence","#p-search"].forEach(s=>$(s).addEventListener("input",renderLeads));
+$("#p-refresh").addEventListener("click",loadLeads);
 function pNotice(m,k="ok"){ $("#p-notice").innerHTML=`<div class="notice ${k}">${esc(m)}</div>`; setTimeout(()=>$("#p-notice").innerHTML="",4000); }
-
-async function loadLeads() {
-  const { data, error } = await sb.from("leads")
-    .select("id,response_id,nom,prenom,email,telephone,agence,campagne,conseiller_id,statut,created_at")
-    .order("created_at",{ascending:false});
-  if (error) { pNotice("Chargement échoué : "+error.message,"err"); return; }
-  leads=data||[];
-  const ags=[...new Set(leads.map(l=>l.agence).filter(Boolean))].sort();
+async function loadLeads(){
+  const {data,error}=await sb.from("leads").select("id,response_id,nom,prenom,email,telephone,agence,campagne,conseiller_id,statut,created_at").order("created_at",{ascending:false});
+  if(error){ pNotice("Chargement échoué : "+error.message,"err"); return; }
+  leads=data||[]; const ags=[...new Set(leads.map(l=>l.agence).filter(Boolean))].sort();
   $("#p-agence").innerHTML='<option value="">Toutes les agences</option>'+ags.map(a=>`<option>${esc(a)}</option>`).join("");
   renderLeads();
 }
-function renderLeads() {
+function renderLeads(){
   const st=$("#p-statut").value, ag=$("#p-agence").value, qq=norm($("#p-search").value);
   const rows=leads.filter(l=>(!st||l.statut===st)&&(!ag||l.agence===ag)&&(!qq||norm([l.nom,l.prenom,l.email].filter(Boolean).join(" ")).includes(qq)));
   const by={}; leads.forEach(l=>by[l.statut]=(by[l.statut]||0)+1);
-  $("#p-kpis").innerHTML=[
-    tile("Leads (total)", leads.length,"",""),
-    tile("Nouveaux", by.nouveau||0,"","à traiter"),
-    tile("En cours",(by.a_contacter||0)+(by.rappel||0)+(by.injoignable||0)+(by.interesse||0)+(by.devis||0),"",""),
-    tile("Souscrits", by.souscrit||0,"",""),
-  ].join("");
+  const kt=(l,n,c)=>`<div class="card kpi"><div class="lbl">${l}</div><div class="v"><span class="n num" style="color:var(${c})">${n}</span></div></div>`;
+  $("#p-kpis").innerHTML=kt("Leads (total)",leads.length,"--blue")+kt("Nouveaux",by.nouveau||0,"--warn")
+    +kt("En cours",(by.a_contacter||0)+(by.rappel||0)+(by.injoignable||0)+(by.interesse||0)+(by.devis||0),"--muted")
+    +kt("Souscrits",by.souscrit||0,"--good");
   $("#p-empty").style.display=rows.length?"none":"block";
-  $("#t-leads").innerHTML=`<thead><tr><th>Client</th><th>Contact</th><th>Agence</th><th>Campagne</th><th>Conseiller</th><th>Statut</th><th></th></tr></thead><tbody>`+
+  $("#leads").innerHTML=`<thead><tr><th>Client</th><th>Contact</th><th>Agence</th><th>Campagne</th><th>Conseiller</th><th>Statut</th><th></th></tr></thead><tbody>`+
     rows.map(l=>{ const nom=[l.prenom,l.nom].filter(Boolean).join(" ")||"—";
       const contact=[l.telephone,l.email].filter(Boolean).map(esc).join("<br>")||"—";
       const opts=STATUTS.map(s=>`<option value="${s}" ${s===l.statut?"selected":""}>${STATUT_LABELS[s]}</option>`).join("");
-      return `<tr><td>${esc(nom)}</td><td class="mono">${contact}</td><td>${esc(l.agence||"—")}</td>
-        <td>${esc(l.campagne||"—")}</td><td>${esc(l.conseiller_id||"—")}</td>
-        <td><span class="pill st-${l.statut}">${STATUT_LABELS[l.statut]||l.statut}</span></td>
+      return `<tr><td>${esc(nom)}</td><td class="mono">${contact}</td><td>${esc(l.agence||"—")}</td><td>${esc(l.campagne||"—")}</td><td>${esc(l.conseiller_id||"—")}</td>
+        <td><span class="pill-st st-${l.statut}">${STATUT_LABELS[l.statut]||l.statut}</span></td>
         <td><select class="lead-st" data-id="${l.id}">${opts}</select> <button class="btn ghost lead-note" data-id="${l.id}">Note</button></td></tr>`;
     }).join("")+`</tbody>`;
   document.querySelectorAll(".lead-st").forEach(s=>s.addEventListener("change",onStatut));
   document.querySelectorAll(".lead-note").forEach(b=>b.addEventListener("click",onNote));
 }
 async function onStatut(e){ const id=e.target.dataset.id, statut=e.target.value;
-  const { error }=await sb.from("leads").update({statut}).eq("id",id);
-  if (error){ pNotice("MAJ échouée : "+error.message,"err"); return; }
+  const {error}=await sb.from("leads").update({statut}).eq("id",id);
+  if(error){ pNotice("MAJ échouée : "+error.message,"err"); return; }
   const l=leads.find(x=>String(x.id)===String(id)); if(l)l.statut=statut; pNotice("Statut mis à jour."); renderLeads(); }
 async function onNote(e){ const id=e.target.dataset.id; const note=prompt("Note de suivi :"); if(!note||!note.trim())return;
-  const { error }=await sb.from("lead_notes").insert({lead_id:id, note:note.trim(), auteur:currentUserEmail});
-  if (error){ pNotice("Note non enregistrée : "+error.message,"err"); return; } pNotice("Note enregistrée."); }
+  const {error}=await sb.from("lead_notes").insert({lead_id:id, note:note.trim(), auteur:currentUserEmail});
+  if(error){ pNotice("Note non enregistrée : "+error.message,"err"); return; } pNotice("Note enregistrée."); }
 
-// ============================ REQUÊTE (import .xlsx) ============================
+// ============================ ADMINISTRATION (import) ============================
 let agencesMap=null;
 function fixMojibake(s){ if(!s)return s; if(!/[ÃÂ]/.test(s))return s; try{return decodeURIComponent(escape(s));}catch{return s;} }
 function slugConseiller(g){ return norm(g).replace(/[^a-z0-9.]+/g,".").replace(/^\.+|\.+$/g,""); }
-function nomFromSlug(slug){ return slug.split(".").map(p=>p? p[0].toUpperCase()+p.slice(1):"").join(" ").trim(); }
-
+function nomFromSlug(slug){ return slug.split(".").map(p=>p?p[0].toUpperCase()+p.slice(1):"").join(" ").trim(); }
+function parseDate(s){ const m=(s||"").trim().match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/); if(!m)return null;
+  const y=m[3].length===2?"20"+m[3]:m[3]; return `${y}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`; }
 async function loadAgencesMap(){ if(agencesMap)return agencesMap;
-  const { data }=await sb.from("agences").select("code,nom,zone,active"); agencesMap={};
+  const {data}=await sb.from("agences").select("code,nom,zone,active"); agencesMap={};
   (data||[]).forEach(a=>agencesMap[String(a.code)]={nom:a.nom,zone:a.zone,active:a.active}); return agencesMap; }
-
-// Détection des colonnes (requête générale ET sinistres clos). Les noms de la
-// requête priment ; les colonnes sinistre (num_sinistre, portable, cloture,
-// gestionnaire_corporel) sont ajoutées sans gêner l'autre fichier.
 function mapReqHeaders(h){ const idx={}; h.forEach((x,i)=>{ const n=norm(x);
   if(n.includes("sinistre"))idx.sinistre=i; else if(n.includes("quittance"))idx.quittance=i;
-  else if(n.includes("cloture"))idx.cloture=i; else if(n.includes("police"))idx.police=i;
-  else if(n.includes("produit"))idx.produit=i; else if(n.startsWith("typq"))idx.typq=i;
-  else if(n==="agence"||n.includes("agence"))idx.agence=i; else if(n.includes("dossier"))idx.dossier=i;
-  else if(n.includes("mail"))idx.email=i; else if(n==="nom")idx.nom=i; else if(n.includes("prenom"))idx.prenom=i;
+  else if(n.includes("ouverture"))idx.ouverture=i; else if(n.includes("cloture"))idx.cloture=i;
+  else if(n.includes("police"))idx.police=i; else if(n.includes("produit"))idx.produit=i;
+  else if(n.startsWith("typq"))idx.typq=i; else if(n==="agence"||n.includes("agence"))idx.agence=i;
+  else if(n.includes("dossier"))idx.dossier=i; else if(n.includes("mail"))idx.email=i;
+  else if(n==="nom")idx.nom=i; else if(n.includes("prenom"))idx.prenom=i;
   else if(n.includes("tel")||n.includes("portable")||n.includes("mobile"))idx.telephone=i;
-  else if(n.includes("gestionnaire")){ if(n.includes("corporel")) idx.gestionnaire_corp=i; else idx.gestionnaire=i; } });
+  else if(n.includes("gestionnaire")){ if(n.includes("corporel"))idx.gestionnaire_corp=i; else idx.gestionnaire=i; } });
   return idx; }
-
-// Import générique. source="requete" (motif choisi par le client) | "sinistre"
-// (motif imposé, questionnaire adapté). Le fichier sinistre n'a pas d'agence :
-// elle reste nulle à l'import et sera choisie par le répondant / héritée si le
-// client figure déjà dans la requête générale du mois.
-async function importFichier(buf, source){
+async function importFichier(buf,source){
   const isSin=source==="sinistre";
-  const campagne=(isSin?$("#s-campagne").value:$("#r-campagne").value) || new Date().toISOString().slice(0,7);
+  const campagne=(isSin?$("#s-campagne").value:$("#r-campagne").value)||new Date().toISOString().slice(0,7);
   await loadAgencesMap();
   const wb=XLSX.read(new Uint8Array(buf),{type:"array"});
   const aoa=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,defval:""});
   if(aoa.length<2) throw new Error("Fichier vide.");
-  const idx=mapReqHeaders(aoa[0]);
-  if(idx.email==null) throw new Error("Colonne e-mail introuvable.");
-  const seen=new Set(), rows=[], cons={};
-  const st={total:0,a_envoyer:0,exclu_resilie:0,exclu_email:0,doublons:0,autre:0,conseillers:0};
-  for(let r=1;r<aoa.length;r++){ const row=aoa[r]; st.total++;
-    const g=k=> idx[k]!=null? fixMojibake(String(row[idx[k]]??"").trim()):"";
+  const idx=mapReqHeaders(aoa[0]); if(idx.email==null) throw new Error("Colonne e-mail introuvable.");
+  const seen=new Set(),rows=[],cons={};
+  const stx={total:0,a_envoyer:0,exclu_resilie:0,exclu_email:0,doublons:0,autre:0,conseillers:0};
+  for(let r=1;r<aoa.length;r++){ const row=aoa[r]; stx.total++;
+    const g=k=> idx[k]!=null?fixMojibake(String(row[idx[k]]??"").trim()):"";
     const email=g("email").toLowerCase();
-    // Agence : requête → code numérique via table agences ; sinistre → inconnue.
     let ag;
     if(isSin){ ag={nom:null,zone:null,active:true}; }
-    else { const code=String(g("agence")).replace(/[^0-9]/g,"");
-      ag=agencesMap[code]||{nom:"Autre",zone:"(non précisée)",active:true}; if(ag.nom==="Autre") st.autre++; }
-    let statut_envoi="a_envoyer", motif_ex=null;
-    if(!isSin){ const nt=norm(g("typq"));
-      if(nt.includes("resilie")&&nt.includes("non paiement")){ statut_envoi="exclu"; motif_ex="résilié non paiement"; st.exclu_resilie++; } }
-    if(!email && statut_envoi==="a_envoyer"){ statut_envoi="exclu"; motif_ex="pas d'email"; st.exclu_email++; }
-    if(email){ if(seen.has(email)){ st.doublons++; continue; } seen.add(email); }
-    // Conseiller : slug depuis Gestionnaire (sinistre : gestionnaire_corporel en secours).
+    else { const code=String(g("agence")).replace(/[^0-9]/g,""); ag=agencesMap[code]||{nom:"Autre",zone:"(non précisée)",active:true}; if(ag.nom==="Autre")stx.autre++; }
+    let statut_envoi="a_envoyer",motif_ex=null;
+    if(!isSin){ const nt=norm(g("typq")); if(nt.includes("resilie")&&nt.includes("non paiement")){ statut_envoi="exclu"; motif_ex="résilié non paiement"; stx.exclu_resilie++; } }
+    if(!email && statut_envoi==="a_envoyer"){ statut_envoi="exclu"; motif_ex="pas d'email"; stx.exclu_email++; }
+    if(email){ if(seen.has(email)){ stx.doublons++; continue; } seen.add(email); }
     let conseiller_id=null; const gslug=slugConseiller(g("gestionnaire")||(isSin?g("gestionnaire_corp"):""));
-    if(gslug && ag.active!==false){ conseiller_id=gslug;
-      if(!cons[gslug]) cons[gslug]=ag.nom? {id:gslug,nom:nomFromSlug(gslug),agence:ag.nom} : {id:gslug,nom:nomFromSlug(gslug)}; }
-    if(statut_envoi==="a_envoyer") st.a_envoyer++;
-    const req = isSin ? (g("sinistre")||g("dossier")||null) : (g("quittance")||g("dossier")||null);
-    rows.push({ req, campagne, email:email||null, nom:g("nom")||null,
-      prenom:g("prenom")||null, telephone:g("telephone")||null, agence:ag.nom, zone:ag.zone,
-      conseiller_id, produit:g("produit")||null, police:g("police")||null, dossier:g("dossier")||null,
-      motif:isSin?"sinistre":null, statut_envoi, motif_exclusion:motif_ex });
+    if(gslug && ag.active!==false){ conseiller_id=gslug; if(!cons[gslug]) cons[gslug]= ag.nom?{id:gslug,nom:nomFromSlug(gslug),agence:ag.nom}:{id:gslug,nom:nomFromSlug(gslug)}; }
+    if(statut_envoi==="a_envoyer") stx.a_envoyer++;
+    const req= isSin?(g("sinistre")||g("dossier")||null):(g("quittance")||g("dossier")||null);
+    const row2={ req, campagne, email:email||null, nom:g("nom")||null, prenom:g("prenom")||null, telephone:g("telephone")||null,
+      agence:ag.nom, zone:ag.zone, conseiller_id, produit:g("produit")||null, police:g("police")||null, dossier:g("dossier")||null,
+      motif:isSin?"sinistre":null, statut_envoi, motif_exclusion:motif_ex };
+    if(isSin){ row2.date_ouverture=parseDate(g("ouverture")); row2.date_cloture=parseDate(g("cloture")); }
+    rows.push(row2);
   }
-  // 1) conseillers d'abord (FK envois/leads)
-  const consList=Object.values(cons); st.conseillers=consList.length;
-  for(let i=0;i<consList.length;i+=200){
-    const { error }=await sb.from("conseillers").upsert(consList.slice(i,i+200),{onConflict:"id",ignoreDuplicates:true});
-    if(error) throw new Error("conseillers : "+error.message);
-  }
-  agencesMap=null; // rechargera si besoin
-  // 2) envois. Nouveaux : insérés (les existants du mois sont préservés).
+  const consList=Object.values(cons); stx.conseillers=consList.length;
+  for(let i=0;i<consList.length;i+=200){ const {error}=await sb.from("conseillers").upsert(consList.slice(i,i+200),{onConflict:"id",ignoreDuplicates:true}); if(error) throw new Error("conseillers : "+error.message); }
+  agencesMap=null;
   let ins=0;
-  for(let i=0;i<rows.length;i+=500){
-    const batch=rows.slice(i,i+500);
-    const { error }=await sb.from("envois_sondage").upsert(batch,{onConflict:"campagne,email",ignoreDuplicates:true});
-    if(error) throw new Error("envois : "+error.message);
-    ins+=batch.length;
-  }
-  // Sinistre : basculer en motif « sinistre » les clients déjà présents (requête
-  // générale) encore à envoyer → ils reçoivent le questionnaire adapté, agence conservée.
-  if(isSin){
-    const emails=[...seen];
-    for(let i=0;i<emails.length;i+=300){
-      const { error }=await sb.from("envois_sondage").update({motif:"sinistre"})
-        .eq("campagne",campagne).eq("statut_envoi","a_envoyer").in("email",emails.slice(i,i+300));
-      if(error) throw new Error("tag sinistre : "+error.message);
-    }
-  }
-  return { st, campagne, ins, isSin };
+  for(let i=0;i<rows.length;i+=500){ const b=rows.slice(i,i+500);
+    const {error}=await sb.from("envois_sondage").upsert(b,{onConflict:"campagne,email",ignoreDuplicates:true}); if(error) throw new Error("envois : "+error.message); ins+=b.length; }
+  if(isSin){ const emails=[...seen];
+    for(let i=0;i<emails.length;i+=300){ const {error}=await sb.from("envois_sondage").update({motif:"sinistre"}).eq("campagne",campagne).eq("statut_envoi","a_envoyer").in("email",emails.slice(i,i+300)); if(error) throw new Error("tag sinistre : "+error.message); } }
+  return { st:stx, campagne, ins, isSin };
 }
-
-function bindImport(fileSel, source, noticeSel, reportSel){
+function bindImport(fileSel,source,noticeSel,reportSel){
   const notice=(m,k="ok")=>{ $(noticeSel).innerHTML=`<div class="notice ${k}">${esc(m)}</div>`; };
-  $(fileSel).addEventListener("change", e=>{ const f=e.target.files[0]; if(!f)return;
+  $(fileSel).addEventListener("change",e=>{ const f=e.target.files[0]; if(!f)return;
     $(reportSel).innerHTML=""; notice("Traitement en cours…");
     const rd=new FileReader();
     rd.onload=async ()=>{ try{
-      const { st, campagne, ins, isSin }=await importFichier(rd.result, source);
-      notice(`Campagne ${campagne} : ${ins} ligne(s) intégrée(s) · ${st.conseillers} conseiller(s) créé(s)/à jour.${isSin?" Motif « sinistre » appliqué.":""}`,"ok");
-      $(reportSel).innerHTML=`<div class="kpis" style="margin-top:16px">
-        ${tile("Lignes fichier",st.total,"","")}
-        ${tile("À envoyer",st.a_envoyer,"","invitations")}
-        ${tile("Exclus",st.exclu_resilie+st.exclu_email,"",`${st.exclu_resilie} résiliés · ${st.exclu_email} sans e-mail`)}
-        ${tile("Doublons",st.doublons,"",st.autre?`${st.autre} agence « Autre »`:"")}</div>`;
+      const {st,campagne,ins,isSin}=await importFichier(rd.result,source);
+      notice(`✓ Campagne ${campagne} : ${ins} ligne(s) intégrée(s) · ${st.conseillers} conseiller(s) créé(s)/à jour.${isSin?" Motif « sinistre » appliqué.":""}`);
+      $(reportSel).innerHTML=`<div class="mini-kpis">
+        <div class="mk"><div class="n num">${st.total}</div><div class="l">Lignes fichier</div></div>
+        <div class="mk"><div class="n num">${st.a_envoyer}</div><div class="l">À envoyer</div></div>
+        <div class="mk"><div class="n num">${st.exclu_resilie+st.exclu_email}</div><div class="l">Exclus (${st.exclu_resilie} résiliés · ${st.exclu_email} sans e-mail)</div></div>
+        <div class="mk"><div class="n num">${st.doublons}</div><div class="l">Doublons${st.autre?` · ${st.autre} « Autre »`:""}</div></div></div>`;
     }catch(err){ notice("Import échoué : "+err.message,"err"); } e.target.value=""; };
     rd.readAsArrayBuffer(f);
   });
 }
 bindImport("#r-file","requete","#r-notice","#r-report");
 bindImport("#s-file","sinistre","#s-notice","#s-report");
+
+// Diffusion Brevo (appel authentifié à l'Edge Function)
+async function diffuser(mode){
+  const camp=$("#d-campagne").value||new Date().toISOString().slice(0,7);
+  let qs=`?campagne=${encodeURIComponent(camp)}`;
+  if(mode==="dry") qs+="&dry=1";
+  if(mode==="test"){ const em=prompt("Adresse e-mail de test :"); if(!em)return; qs+="&test="+encodeURIComponent(em); }
+  if(mode==="send" && !confirm(`Envoyer réellement les invitations de la campagne ${camp} ?`)) return;
+  $("#d-notice").innerHTML=`<div class="notice ok">Traitement…</div>`; $("#d-report").innerHTML="";
+  try{
+    const {data:{session}}=await sb.auth.getSession();
+    const res=await fetch(`${SB_URL}/functions/v1/envoi-sondage${qs}`,{ headers:{ Authorization:`Bearer ${session.access_token}` } });
+    const j=await res.json();
+    if(!res.ok || j.ok===false) throw new Error(j.error||"Échec de la diffusion.");
+    let msg = j.dry ? `Aperçu : ${j.aTraiter??0} invitation(s) prête(s).`
+      : j.test ? `Test envoyé à ${j.to}.`
+      : `Envoi terminé : ${j.envoyes??0} envoyée(s), ${j.echecs??0} échec(s).`;
+    $("#d-notice").innerHTML=`<div class="notice ok">✓ ${esc(msg)}</div>`;
+    if(j.apercu&&j.apercu.length) $("#d-report").innerHTML=`<div class="sub" style="margin-top:12px">Exemple de lien : <span class="tag-mono">${esc(j.apercu[0].lien||"")}</span></div>`;
+  }catch(err){ $("#d-notice").innerHTML=`<div class="notice err">${esc(err.message)}</div>`; }
+}
+$("#d-dry").addEventListener("click",()=>diffuser("dry"));
+$("#d-test").addEventListener("click",()=>diffuser("test"));
+$("#d-send").addEventListener("click",()=>diffuser("send"));
 
 // go
 boot();
