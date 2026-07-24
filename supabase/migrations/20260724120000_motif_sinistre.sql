@@ -47,7 +47,10 @@ select campagne, motif, reponses, nps_rep, promoteurs, passifs, detracteurs,
 from rep;
 
 -- --- v_verbatims : ajouter motif + mesures sinistre --------------------------
-create or replace view public.v_verbatims
+-- drop + create (et non « create or replace ») : on insère motif avant nps, ce
+-- qui réordonne les colonnes — interdit par create-or-replace sur une vue existante.
+drop view if exists public.v_verbatims;
+create view public.v_verbatims
 with (security_invoker = on) as
 select response_id, date_reponse, campagne, agence, zone, conseiller_id, motif,
   nps, nps_categorie, satisfaction_globale, note_conseiller, sat_sinistre, delai_indemnisation, commentaire,
