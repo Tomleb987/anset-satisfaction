@@ -1,0 +1,11 @@
+# Config CLI Supabase — projet ANSET « Satisfaction » (region eu-west-1, UE).
+# `supabase link --project-ref xizitftoejfxaizztzeu` avant `db push` / `functions deploy`.
+project_id = "xizitftoejfxaizztzeu"
+
+# Formulaire public → endpoint sans JWT (le client n'est pas authentifié).
+[functions.submit-sondage]
+verify_jwt = false
+
+# Envoi Brevo → déclenché par un manager connecté (ou service key) : JWT requis.
+[functions.envoi-sondage]
+verify_jwt = true

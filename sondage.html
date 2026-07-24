@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Votre avis — ANSET</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<style>
+  :root {
+    --blue: #1C509D;        /* Bleu foncé ANSET (charte) */
+    --blue-dark: #143a72;
+    --red: #E83C30;         /* rouge TAHITI (logo) */
+    --cream: #F7F9FC;
+    --ink: #1c2534;
+    --muted: #64708a;
+    --border: #dde3ec;
+    --ok: #16a34a;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--cream);
+    color: var(--ink);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 0 18px;
+  }
+  .wrap { width: 100%; max-width: 480px; display: flex; flex-direction: column; min-height: 100dvh; }
+
+  header { padding: 22px 0 10px; display: flex; align-items: center; gap: 12px; }
+  header img.brandlogo { height: 40px; width: auto; }
+  header .tagline { color: var(--muted); font-weight: 500; font-size: 14px; border-left: 1px solid var(--border); padding-left: 12px; }
+
+  .progress { height: 6px; background: #ece6db; border-radius: 999px; overflow: hidden; margin-bottom: 26px; }
+  .progress > div { height: 100%; background: var(--blue); border-radius: 999px; transition: width .3s ease; width: 0; }
+
+  main { flex: 1; }
+  .step { display: none; animation: fade .25s ease; }
+  .step.active { display: block; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  .q { font-size: 22px; font-weight: 700; line-height: 1.3; margin: 0 0 6px; }
+  .hint { color: var(--muted); font-size: 14px; margin: 0 0 22px; }
+
+  .opts { display: grid; gap: 10px; }
+  .opt {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px; border: 1.5px solid var(--border); background: #fff;
+    border-radius: var(--radius); font-size: 16px; cursor: pointer; text-align: left;
+    transition: border-color .15s, background .15s;
+  }
+  .opt:hover { border-color: #cfc6b6; }
+  .opt.sel { border-color: var(--blue); background: #eaf1fb; }
+
+  .scale { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+  .scale.s5 { grid-template-columns: repeat(5, 1fr); }
+  .scale button {
+    aspect-ratio: 1; border: 1.5px solid var(--border); background: #fff; border-radius: 12px;
+    font-size: 17px; font-weight: 600; color: var(--ink); cursor: pointer;
+  }
+  .scale button.sel { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .scalelbl { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+  select, input[type=text], input[type=tel], input[type=email], textarea {
+    width: 100%; padding: 14px; border: 1.5px solid var(--border); border-radius: var(--radius);
+    font-size: 16px; font-family: inherit; background: #fff; color: var(--ink);
+  }
+  textarea { min-height: 110px; resize: vertical; }
+
+  .consent { display: flex; gap: 12px; align-items: flex-start; padding: 16px; border: 1.5px solid var(--border); border-radius: var(--radius); background: #fff; cursor: pointer; }
+  .consent input { width: 22px; height: 22px; margin-top: 1px; accent-color: var(--blue); flex-shrink: 0; }
+  .consent label { font-size: 15px; line-height: 1.4; }
+  .contact-fields { display: grid; gap: 10px; margin-top: 14px; }
+  .contact-fields.hidden { display: none; }
+
+  .cf-turnstile { margin: 20px 0 4px; }
+
+  footer { padding: 18px 0 26px; }
+  .nav { display: flex; gap: 10px; margin-top: 26px; }
+  .btn {
+    flex: 1; padding: 15px; border: none; border-radius: var(--radius);
+    font-size: 16px; font-weight: 700; font-family: inherit; cursor: pointer;
+  }
+  .btn.primary { background: var(--blue); color: #fff; }
+  .btn.primary:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.ghost { background: transparent; color: var(--muted); flex: 0 0 auto; padding: 15px 18px; }
+
+  .rgpd { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin-top: 22px; border-top: 1px solid var(--border); padding-top: 16px; }
+  .rgpd a { color: var(--blue); }
+
+  .thanks { text-align: center; padding: 60px 0; }
+  .thanks .check { width: 64px; height: 64px; border-radius: 50%; background: var(--ok); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 34px; margin-bottom: 18px; }
+  .thanks h2 { font-size: 24px; margin: 0 0 8px; }
+  .thanks p { color: var(--muted); font-size: 15px; }
+  .err { color: #dc2626; font-size: 14px; margin-top: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img class="brandlogo" src="anset_brand_logo_TAHITI.png" alt="ANSET Assurances Tahiti" />
+    <span class="tagline">Votre avis</span>
+  </header>
+  <div class="progress"><div id="bar"></div></div>
+
+  <main id="form">
+    <!-- 1. Interaction -->
+    <section class="step active" data-field="interaction" data-role="interaction">
+      <h1 class="q">Avez-vous eu une interaction récente avec ANSET ?</h1>
+      <p class="hint">Visite en agence, appel, e-mail, souscription…</p>
+      <div class="opts" data-field="interaction" data-type="choice" data-bool="true">
+        <button class="opt" data-value="true">Oui</button>
+        <button class="opt" data-value="false">Non</button>
+      </div>
+    </section>
+
+    <!-- 2. Agence (si interaction) -->
+    <section class="step" data-field="agence" data-cond="interaction">
+      <h1 class="q">Dans quelle agence ?</h1>
+      <p class="hint">Sélectionnez votre agence habituelle.</p>
+      <select id="agence" data-field="agence">
+        <option value="">— Choisir —</option>
+        <option>Papeete</option>
+        <option>Faa'a</option>
+        <option>Fariipiti</option>
+        <option>Mahina</option>
+        <option>Moorea</option>
+        <option>Taravao</option>
+        <option>Punaauia</option>
+        <option>Papara</option>
+        <option>Agence en ligne</option>
+      </select>
+    </section>
+
+    <!-- Motif (si interaction, et si non connu via le lien) -->
+    <section class="step" data-field="motif" data-cond="interaction" data-role="motif">
+      <h1 class="q">Quel était l'objet de votre échange ?</h1>
+      <p class="hint">Le motif principal de votre contact récent.</p>
+      <div class="opts" data-field="motif" data-type="choice">
+        <button class="opt" data-value="souscription">Souscription / nouveau contrat</button>
+        <button class="opt" data-value="sinistre">Sinistre</button>
+        <button class="opt" data-value="gestion">Gestion de contrat (avenant, modification)</button>
+        <button class="opt" data-value="reclamation">Réclamation</button>
+        <button class="opt" data-value="information">Information / conseil / devis</button>
+        <button class="opt" data-value="autre">Autre</button>
+      </div>
+    </section>
+
+    <!-- Sinistre : qualité de gestion (si motif = sinistre) -->
+    <section class="step" data-field="sat_sinistre" data-cond="interaction" data-motif="sinistre">
+      <h1 class="q">Comment s'est passée la gestion de votre sinistre ?</h1>
+      <p class="hint">Prise en charge, suivi, information — de 1 à 5.</p>
+      <div class="scale s5" data-field="sat_sinistre" data-type="scale" id="sinistre-scale"></div>
+      <div class="scalelbl"><span>Très insatisfait</span><span>Très satisfait</span></div>
+    </section>
+
+    <!-- Sinistre : délai d'indemnisation (si motif = sinistre) -->
+    <section class="step" data-field="delai_indemnisation" data-cond="interaction" data-motif="sinistre">
+      <h1 class="q">Le délai d'indemnisation vous a paru…</h1>
+      <p class="hint">1 = beaucoup trop long, 5 = très rapide.</p>
+      <div class="scale s5" data-field="delai_indemnisation" data-type="scale" id="delai-scale"></div>
+      <div class="scalelbl"><span>Trop long</span><span>Très rapide</span></div>
+    </section>
+
+    <!-- 3. Accueil (si interaction) -->
+    <section class="step" data-field="csat_accueil" data-cond="interaction">
+      <h1 class="q">La qualité de l'accueil ?</h1>
+      <p class="hint">De 1 (très insatisfait) à 5 (très satisfait).</p>
+      <div class="scale s5" data-field="csat_accueil" data-type="scale" id="accueil-scale"></div>
+      <div class="scalelbl"><span>Très insatisfait</span><span>Très satisfait</span></div>
+    </section>
+
+    <!-- 4. Conseiller (si interaction) -->
+    <section class="step" data-field="csat_conseiller" data-cond="interaction">
+      <h1 class="q">Votre conseiller ?</h1>
+      <p class="hint">Écoute, compétence, clarté — de 1 à 5.</p>
+      <div class="scale s5" data-field="csat_conseiller" data-type="scale" id="conseiller-scale"></div>
+      <div class="scalelbl"><span>Très insatisfait</span><span>Très satisfait</span></div>
+    </section>
+
+    <!-- 5. NPS (si interaction) -->
+    <section class="step" data-field="nps" data-cond="interaction">
+      <h1 class="q">Nous recommanderiez-vous ANSET ?</h1>
+      <p class="hint">0 = pas du tout, 10 = tout à fait.</p>
+      <div class="scale" data-field="nps" data-type="scale" id="nps-scale"></div>
+      <div class="scalelbl"><span>Pas du tout</span><span>Tout à fait</span></div>
+    </section>
+
+    <!-- 6. Satisfaction globale (si interaction) -->
+    <section class="step" data-field="csat_global" data-cond="interaction">
+      <h1 class="q">Votre satisfaction globale ?</h1>
+      <p class="hint">De 1 (très insatisfait) à 5 (très satisfait).</p>
+      <div class="scale s5" data-field="csat_global" data-type="scale" id="csat-scale"></div>
+      <div class="scalelbl"><span>Très insatisfait</span><span>Très satisfait</span></div>
+    </section>
+
+    <!-- 7. Réseaux sociaux (si interaction) -->
+    <section class="step" data-field="reseaux_sociaux" data-cond="interaction">
+      <h1 class="q">Suivez-vous ANSET sur les réseaux sociaux ?</h1>
+      <p class="hint">Facebook, Instagram… pour suivre nos actualités et conseils.</p>
+      <div class="opts" data-field="reseaux_sociaux" data-type="choice">
+        <button class="opt" data-value="oui">Oui, je vous suis</button>
+        <button class="opt" data-value="interesse">Non, mais ça m'intéresse</button>
+        <button class="opt" data-value="non">Non</button>
+      </div>
+    </section>
+
+    <!-- 8. Commentaire (si interaction) -->
+    <section class="step" data-field="commentaire" data-cond="interaction" data-optional="true">
+      <h1 class="q">Un commentaire ?</h1>
+      <p class="hint" id="comment-hint">Facultatif — dites-nous ce qui pourrait être amélioré.</p>
+      <textarea id="commentaire" data-field="commentaire" placeholder="Votre message…"></textarea>
+    </section>
+
+    <!-- 9. Recontact + envoi -->
+    <section class="step" data-optional="true" data-role="recontact">
+      <h1 class="q">Souhaitez-vous être recontacté(e) ?</h1>
+      <p class="hint" id="recontact-hint">Uniquement si vous le souhaitez.</p>
+      <div class="consent" id="consent-box">
+        <input type="checkbox" id="consent" />
+        <label for="consent">J'accepte d'être recontacté(e) par un conseiller ANSET pour découvrir ses offres.</label>
+      </div>
+      <div class="contact-fields hidden" id="contact-fields">
+        <input type="text"  id="prenom"    placeholder="Prénom" autocomplete="given-name" />
+        <input type="tel"   id="telephone" placeholder="Téléphone" autocomplete="tel" />
+        <input type="email" id="email"     placeholder="E-mail" autocomplete="email" />
+      </div>
+
+      <div class="cf-turnstile" data-sitekey="TURNSTILE_SITEKEY_A_RENSEIGNER"></div>
+      <div id="submit-err" class="err"></div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="nav" id="nav">
+      <button class="btn ghost" id="prev" style="display:none">Retour</button>
+      <button class="btn primary" id="next">Continuer</button>
+    </div>
+    <p class="rgpd">
+      Les informations recueillies par <strong>ANSET</strong> (responsable du traitement) servent à
+      mesurer votre satisfaction et, si vous y consentez, à vous recontacter pour une offre commerciale.
+      Données conservées 12 mois maximum. Vous disposez d'un droit d'accès, de rectification et de
+      suppression : <a href="mailto:rgpd@anset.pf">rgpd@anset.pf</a>.
+      Voir notre <a href="https://www.anset.pf/confidentialite" target="_blank" rel="noopener">politique de confidentialité</a>.
+    </p>
+  </footer>
+</div>
+
+<!-- Écran de remerciement -->
+<template id="thanks-tpl">
+  <div class="wrap"><div class="thanks">
+    <div class="check">✓</div>
+    <h2>Merci !</h2>
+    <p>Votre réponse a bien été enregistrée. Elle nous aide à améliorer nos services.</p>
+  </div></div>
+</template>
+
+<script>
+// ============================ CONFIG =========================================
+const SUBMIT_URL = "https://xizitftoejfxaizztzeu.supabase.co/functions/v1/submit-sondage";
+// La clé "site" Turnstile est publique : renseignez-la ici ET dans le widget
+// (attribut data-sitekey ci-dessus).
+// ============================================================================
+
+// Motifs d'interaction (slugs alignés sur la base et le dashboard).
+const MOTIF_KEYS = ["souscription", "sinistre", "gestion", "reclamation", "information", "autre"];
+
+// Paramètres du lien personnalisé.
+const params = new URLSearchParams(location.search);
+const urlAgence     = params.get("agence");
+const urlConseiller = params.get("conseiller");
+const urlReq        = params.get("req");
+// Motif connu d'avance (campagnes typées, ex. sinistres clos) → question masquée.
+const motifFromUrl = (() => {
+  const m = (params.get("motif") || "").toLowerCase().trim();
+  return MOTIF_KEYS.includes(m) ? m : null;
+})();
+
+// État des réponses.
+const answers = { interaction: null, agence: null, motif: null, sat_sinistre: null, delai_indemnisation: null,
+  csat_accueil: null, csat_conseiller: null, nps: null, csat_global: null, reseaux_sociaux: null, commentaire: null };
+
+// Si le motif vient du lien : interaction implicite (le client a bien eu un contact).
+if (motifFromUrl) { answers.motif = motifFromUrl; answers.interaction = true; }
+
+// Pré-remplissage agence (modifiable).
+if (urlAgence) {
+  const sel = document.getElementById("agence");
+  const opt = [...sel.options].find(o => o.value.toLowerCase() === urlAgence.toLowerCase() || o.text.toLowerCase() === urlAgence.toLowerCase());
+  if (opt) { sel.value = opt.value || opt.text; answers.agence = sel.value; }
+  else { const o = new Option(urlAgence, urlAgence, true, true); sel.add(o); answers.agence = urlAgence; }
+}
+
+// Génère les échelles.
+function buildScale(el, from, to, field) {
+  for (let i = from; i <= to; i++) {
+    const b = document.createElement("button");
+    b.textContent = i; b.dataset.value = i;
+    b.addEventListener("click", () => {
+      [...el.children].forEach(c => c.classList.remove("sel"));
+      b.classList.add("sel");
+      answers[field] = i;
+      updateNav();
+    });
+    el.appendChild(b);
+  }
+}
+buildScale(document.getElementById("nps-scale"), 0, 10, "nps");
+buildScale(document.getElementById("csat-scale"), 1, 5, "csat_global");
+buildScale(document.getElementById("accueil-scale"), 1, 5, "csat_accueil");
+buildScale(document.getElementById("conseiller-scale"), 1, 5, "csat_conseiller");
+buildScale(document.getElementById("sinistre-scale"), 1, 5, "sat_sinistre");
+buildScale(document.getElementById("delai-scale"), 1, 5, "delai_indemnisation");
+
+// Boutons de choix. data-bool="true" → réponse booléenne (interaction) ; sinon valeur texte (motif).
+document.querySelectorAll('[data-type="choice"]').forEach(group => {
+  const field = group.dataset.field;
+  const isBool = group.dataset.bool === "true";
+  group.querySelectorAll(".opt").forEach(btn => btn.addEventListener("click", () => {
+    group.querySelectorAll(".opt").forEach(b => b.classList.remove("sel"));
+    btn.classList.add("sel");
+    answers[field] = isBool ? (btn.dataset.value === "true") : btn.dataset.value;
+    updateNav();
+  }));
+});
+
+// Agence select + commentaire.
+document.getElementById("agence").addEventListener("change", e => { answers.agence = e.target.value || null; updateNav(); });
+document.getElementById("commentaire").addEventListener("input", e => { answers.commentaire = e.target.value.trim() || null; });
+
+// Consentement → révèle les champs contact.
+const consent = document.getElementById("consent");
+const contactFields = document.getElementById("contact-fields");
+document.getElementById("consent-box").addEventListener("click", e => {
+  if (e.target !== consent) consent.checked = !consent.checked;
+  contactFields.classList.toggle("hidden", !consent.checked);
+});
+consent.addEventListener("change", () => contactFields.classList.toggle("hidden", !consent.checked));
+
+// Astuce : mettre en avant le commentaire si note basse.
+function refreshCommentHint() {
+  const low = (answers.csat_global !== null && answers.csat_global <= 3) || (answers.nps !== null && answers.nps <= 6);
+  document.getElementById("comment-hint").textContent = low
+    ? "Nous sommes désolés. Dites-nous ce qui n'a pas été, nous y remédierons."
+    : "Facultatif — dites-nous ce qui pourrait être amélioré.";
+}
+
+// ---------------------------- Navigation stepper (conditionnelle) ----------
+const allSteps = [...document.querySelectorAll(".step")];
+const bar = document.getElementById("bar");
+const btnNext = document.getElementById("next");
+const btnPrev = document.getElementById("prev");
+let current = allSteps[0];
+
+// Visibilité conditionnelle d'une étape :
+//  - data-cond="interaction"   → visible seulement si interaction = oui
+//  - data-role="interaction"   → masquée si le motif est déjà connu (lien typé)
+//  - data-role="motif"         → masquée si le motif est déjà connu (lien typé)
+//  - data-motif="sinistre"     → visible seulement si le motif choisi est "sinistre"
+const stepVisible = s => {
+  if (s.dataset.role === "interaction" && motifFromUrl) return false;
+  if (s.dataset.cond && answers[s.dataset.cond] !== true) return false;
+  if (s.dataset.role === "motif" && motifFromUrl) return false;
+  if (s.dataset.motif && answers.motif !== s.dataset.motif) return false;
+  return true;
+};
+const visibleSteps = () => allSteps.filter(stepVisible);
+
+function updateNav() {
+  const vis = visibleSteps();
+  if (!vis.includes(current)) current = vis[0];
+  allSteps.forEach(s => s.classList.toggle("active", s === current));
+  const pos = vis.indexOf(current);
+  bar.style.width = (vis.length > 1 ? pos / (vis.length - 1) * 100 : 0) + "%";
+  btnPrev.style.display = pos === 0 ? "none" : "block";
+  const field = current.dataset.field;
+  const required = field && current.dataset.optional !== "true";
+  const val = field ? answers[field] : null;
+  const done = !required || (val !== null && val !== "" && val !== undefined);
+  btnNext.disabled = !done;
+  btnNext.textContent = pos === vis.length - 1 ? "Envoyer" : "Continuer";
+  if (field === "commentaire") refreshCommentHint();
+  // Écran de recontact : message adapté selon qu'il y a eu ou non une interaction.
+  if (current.dataset.role === "recontact") {
+    document.getElementById("recontact-hint").textContent = answers.interaction === false
+      ? "Pas d'interaction récente ? Laissez-nous vos coordonnées si vous souhaitez qu'un conseiller vous présente nos offres."
+      : "Uniquement si vous le souhaitez.";
+  }
+}
+
+function goTo(step) {
+  current = step;
+  updateNav();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+btnPrev.addEventListener("click", () => {
+  const vis = visibleSteps(); const pos = vis.indexOf(current);
+  if (pos > 0) goTo(vis[pos - 1]);
+});
+btnNext.addEventListener("click", () => {
+  if (btnNext.disabled) return;
+  const vis = visibleSteps(); const pos = vis.indexOf(current);
+  if (pos < vis.length - 1) goTo(vis[pos + 1]);
+  else submit();
+});
+
+// ---------------------------- Soumission ------------------------------------
+async function submit() {
+  const errBox = document.getElementById("submit-err");
+  errBox.textContent = "";
+
+  // Token Turnstile (input caché injecté par le widget).
+  const tokenInput = document.querySelector('[name="cf-turnstile-response"]');
+  const turnstileToken = tokenInput ? tokenInput.value : "";
+  if (!turnstileToken) { errBox.textContent = "Merci de valider le contrôle anti-robot."; return; }
+
+  // Consentement : n'envoyer les coordonnées que si la case est cochée.
+  const consentOn = consent.checked;
+  const payload = {
+    turnstileToken,
+    interaction: answers.interaction,
+    agence: answers.agence,
+    motif: answers.motif || null,
+    sat_sinistre:        answers.motif === "sinistre" ? answers.sat_sinistre : null,
+    delai_indemnisation: answers.motif === "sinistre" ? answers.delai_indemnisation : null,
+    nps: answers.nps,
+    csat_global: answers.csat_global,
+    csat_accueil:    answers.interaction === true ? answers.csat_accueil : null,
+    csat_conseiller: answers.interaction === true ? answers.csat_conseiller : null,
+    reseaux_sociaux: answers.interaction === true ? answers.reseaux_sociaux : null,
+    commentaire: answers.commentaire,
+    consent: consentOn,
+    prenom:    consentOn ? (document.getElementById("prenom").value.trim()    || null) : null,
+    telephone: consentOn ? (document.getElementById("telephone").value.trim() || null) : null,
+    email:     consentOn ? (document.getElementById("email").value.trim()     || null) : null,
+    conseiller_id: urlConseiller || null,
+    req: urlReq || null,
+  };
+
+  if (consentOn && !payload.telephone && !payload.email) {
+    errBox.textContent = "Indiquez au moins un téléphone ou un e-mail pour être recontacté(e).";
+    return;
+  }
+
+  btnNext.disabled = true;
+  btnNext.textContent = "Envoi…";
+  try {
+    const res = await fetch(SUBMIT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || "Erreur réseau.");
+    showThanks();
+  } catch (err) {
+    errBox.textContent = err.message || "Envoi impossible. Réessayez dans un instant.";
+    btnNext.disabled = false;
+    btnNext.textContent = "Envoyer";
+    // Réinitialise Turnstile pour un nouveau token.
+    if (window.turnstile) window.turnstile.reset();
+  }
+}
+
+function showThanks() {
+  const tpl = document.getElementById("thanks-tpl").content.cloneNode(true);
+  document.body.innerHTML = "";
+  document.body.appendChild(tpl);
+}
+
+updateNav();
+</script>
+</body>
+</html>

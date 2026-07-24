@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ANSET — Pilotage Satisfaction & Prospection</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --blue:#1C509D; --blue-dark:#143a72; --blue-soft:#e9f0f9;
+    --ciel:#6A9BAF; --corail:#D36F6B; --moutarde:#E69D46; --menthe:#77AA92; --mauve:#715689;
+    --prom:#77AA92; --passif:#E69D46; --detr:#D36F6B;
+    --bg:#f4f6f9; --surface:#ffffff; --surface-2:#eef2f7; --border:#e2e8f1;
+    --text:#18233a; --muted:#657189;
+    --radius:14px; --shadow:0 1px 2px rgba(20,40,80,.05), 0 2px 8px rgba(20,40,80,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --blue:#5c96e0; --blue-dark:#3f78c4; --blue-soft:#16253c;
+      --bg:#0e1420; --surface:#151d2b; --surface-2:#1b2536; --border:#28344a;
+      --text:#e7ecf4; --muted:#93a1b8; --shadow:none;
+    }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"DM Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:var(--bg); color:var(--text); line-height:1.45; }
+  .num { font-variant-numeric:tabular-nums; }
+  .mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; }
+
+  /* ---- Gate de connexion ---- */
+  #gate { position:fixed; inset:0; background:var(--bg); display:flex; align-items:center; justify-content:center; z-index:100; }
+  #gate .card { width:360px; max-width:92vw; }
+  #gate img { height:42px; margin-bottom:20px; }
+  #gate h1 { font-size:18px; margin:0 0 4px; }
+  #gate p { color:var(--muted); font-size:13px; margin:0 0 18px; }
+  #gate input { width:100%; margin-bottom:12px; }
+  #gate button { width:100%; }
+
+  /* ---- App shell ---- */
+  #app { display:none; }
+  header.appbar { display:flex; align-items:center; gap:18px; padding:12px 22px; background:var(--surface);
+    border-bottom:1px solid var(--border); position:sticky; top:0; z-index:20; }
+  header.appbar img.logo { height:30px; }
+  .tabs { display:flex; gap:4px; margin-left:12px; }
+  .tab { border:none; background:transparent; color:var(--muted); padding:8px 16px; border-radius:9px;
+    cursor:pointer; font-size:14px; font-weight:600; font-family:inherit; }
+  .tab.active { background:var(--blue-soft); color:var(--blue); }
+  .appbar .spacer { flex:1; }
+  .appbar .who { color:var(--muted); font-size:12.5px; }
+  main { padding:22px; max-width:1240px; margin:0 auto; }
+  section.view { display:none; }
+  section.view.active { display:block; }
+
+  /* ---- Contrôles ---- */
+  .toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:20px; }
+  .toolbar .spacer { flex:1; }
+  select, input[type=text], input[type=password], input[type=email], input[type=month] {
+    background:var(--surface); color:var(--text); border:1px solid var(--border);
+    border-radius:9px; padding:8px 11px; font-size:14px; font-family:inherit; }
+  label.fld { font-size:12.5px; color:var(--muted); display:inline-flex; align-items:center; gap:7px; }
+  button.btn { background:var(--blue); color:#fff; border:none; border-radius:9px; padding:9px 15px;
+    font-size:14px; font-weight:600; font-family:inherit; cursor:pointer; }
+  button.btn.ghost { background:var(--surface); color:var(--text); border:1px solid var(--border); }
+  button.btn:disabled { opacity:.5; cursor:not-allowed; }
+  label.filelabel { display:inline-flex; } label.filelabel input { display:none; }
+
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); }
+  .panel { padding:18px; margin-bottom:20px; }
+  .panel h2 { font-size:14px; margin:0 0 4px; letter-spacing:.2px; }
+  .panel .sub { color:var(--muted); font-size:12.5px; margin:0 0 16px; }
+  .grid2 { display:grid; grid-template-columns:2fr 1fr; gap:20px; } @media(max-width:900px){ .grid2{grid-template-columns:1fr;} }
+
+  /* ---- KPI tiles ---- */
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:20px; }
+  .kpi { padding:15px 17px; position:relative; }
+  .kpi .lbl { color:var(--muted); font-size:11.5px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; }
+  .kpi .val { font-size:28px; font-weight:700; margin-top:5px; display:flex; align-items:baseline; gap:8px; }
+  .kpi .delta { font-size:12.5px; font-weight:700; }
+  .kpi .spark { position:absolute; right:14px; bottom:12px; opacity:.85; }
+  .kpi .foot { color:var(--muted); font-size:12px; margin-top:2px; }
+  .up { color:var(--menthe); } .down { color:var(--corail); } .flat { color:var(--muted); }
+
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  th,td { text-align:left; padding:9px 11px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  th { color:var(--muted); font-weight:600; font-size:11.5px; text-transform:uppercase; letter-spacing:.3px; cursor:pointer; }
+  th.n, td.n { text-align:right; }
+  tbody tr:hover { background:var(--surface-2); }
+  .table-wrap { overflow-x:auto; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+  .chip { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; background:var(--surface-2); color:var(--muted); }
+
+  /* ---- barres horizontales (zones) ---- */
+  .hbar { display:grid; grid-template-columns:130px 1fr 84px; gap:10px; align-items:center; padding:6px 0; font-size:13px; }
+  .hbar .track { background:var(--surface-2); border-radius:6px; height:16px; overflow:hidden; }
+  .hbar .fill { height:100%; border-radius:6px; }
+
+  /* ---- composition NPS empilée ---- */
+  .compo { display:flex; flex-direction:column; gap:7px; }
+  .compo .row { display:grid; grid-template-columns:64px 1fr; gap:10px; align-items:center; font-size:12px; }
+  .compo .bar { display:flex; height:18px; border-radius:5px; overflow:hidden; }
+  .compo .bar > span { display:block; }
+
+  /* ---- verbatims ---- */
+  .vb { border-left:3px solid var(--border); padding:8px 12px; margin-bottom:10px; font-size:13.5px; }
+  .vb.det { border-left-color:var(--detr); }
+  .vb .meta { color:var(--muted); font-size:11.5px; margin-top:4px; }
+
+  /* ---- heatmap ---- */
+  .heat { border-collapse:separate; border-spacing:3px; font-size:11px; }
+  .heat td { padding:0; border:none; white-space:nowrap; }
+  .heat .cell { width:38px; height:26px; border-radius:5px; text-align:center; color:#fff; font-weight:600; line-height:26px; }
+  .heat .rowlbl { color:var(--muted); padding-right:8px; text-align:right; }
+  .heat .collbl { color:var(--muted); text-align:center; font-size:10px; }
+
+  /* ---- pills statut leads ---- */
+  .pill { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:600; }
+  .st-nouveau{background:var(--blue-soft);color:var(--blue);} .st-a_contacter{background:#ece7f6;color:#6d4fae;}
+  .st-injoignable{background:var(--surface-2);color:var(--muted);} .st-rappel{background:#e6f6fb;color:#0e7490;}
+  .st-interesse{background:#fff2e6;color:#b5651b;} .st-devis{background:#fdf6e3;color:#9a7b12;}
+  .st-souscrit{background:#e9f7ef;color:#2e8b57;} .st-sans_suite{background:#fdeceb;color:#c0392b;}
+  .st-ne_pas_contacter{background:#fdeceb;color:#c0392b;}
+
+  .empty { text-align:center; color:var(--muted); padding:44px 20px; }
+  .notice { padding:10px 14px; border-radius:9px; font-size:13px; margin:12px 0; }
+  .notice.err { background:#fdeceb; color:#c0392b; } .notice.ok { background:#e9f7ef; color:#2e8b57; }
+  .faint { color:var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- =============================== GATE =============================== -->
+<div id="gate">
+  <div class="card panel" style="padding:28px">
+    <img src="anset_brand_logo_TAHITI.png" alt="ANSET Assurances" />
+    <h1>Pilotage ANSET</h1>
+    <p>Accès réservé. Données clients protégées (RLS Supabase).</p>
+    <div id="gate-err"></div>
+    <input type="email" id="gate-email" placeholder="Email" autocomplete="username" />
+    <input type="password" id="gate-pass" placeholder="Mot de passe" autocomplete="current-password" />
+    <button class="btn" id="gate-btn">Se connecter</button>
+  </div>
+</div>
+
+<!-- =============================== APP =============================== -->
+<div id="app">
+  <header class="appbar">
+    <img class="logo" src="anset_brand_logo_TAHITI.png" alt="ANSET" />
+    <nav class="tabs">
+      <button class="tab active" data-view="satisfaction">Satisfaction</button>
+      <button class="tab" data-view="prospection">Prospection</button>
+      <button class="tab" data-view="requete">Requête</button>
+    </nav>
+    <div class="spacer"></div>
+    <span class="who" id="who"></span>
+    <button class="btn ghost" id="logout">Déconnexion</button>
+  </header>
+
+  <main>
+    <!-- ===================== SATISFACTION ===================== -->
+    <section class="view active" id="view-satisfaction">
+      <div class="toolbar">
+        <label class="fld">Campagne <select id="f-campagne"></select></label>
+        <label class="fld">Zone <select id="f-zone"><option value="">Toutes</option></select></label>
+        <label class="fld">Agence <select id="f-agence"><option value="">Toutes</option></select></label>
+        <div class="spacer"></div>
+        <button class="btn ghost" id="sat-refresh">Actualiser</button>
+      </div>
+      <div id="sat-body">
+        <div class="kpis" id="kpis"></div>
+        <div class="grid2">
+          <div class="card panel">
+            <h2>Score NPS — tendance</h2>
+            <div class="sub">Par campagne · cible +30 (pointillés)</div>
+            <div id="chart-nps"></div>
+          </div>
+          <div class="card panel">
+            <h2>Composition NPS</h2>
+            <div class="sub">Promoteurs / passifs / détracteurs</div>
+            <div class="compo" id="chart-compo"></div>
+          </div>
+        </div>
+        <div class="card panel">
+          <h2>Classement par zone</h2>
+          <div class="sub">Score NPS de la campagne sélectionnée · trait = moyenne réseau</div>
+          <div id="zones"></div>
+        </div>
+        <div class="card panel">
+          <h2>Par agence</h2>
+          <div class="sub" id="ag-sub"></div>
+          <div class="table-wrap"><table id="t-agences"></table></div>
+        </div>
+        <div class="card panel">
+          <h2>Par conseiller</h2>
+          <div class="sub" id="cons-sub"></div>
+          <div class="table-wrap"><table id="t-conseillers"></table></div>
+        </div>
+        <div class="grid2">
+          <div class="card panel">
+            <h2>Par motif d'interaction</h2>
+            <div class="sub" id="motif-sub"></div>
+            <div class="table-wrap"><table id="t-motifs"></table></div>
+          </div>
+          <div class="card panel" id="sinistre-card">
+            <h2>Sinistres clos</h2>
+            <div class="sub">Expérience de gestion des sinistres · campagne sélectionnée</div>
+            <div class="kpis" id="sinistre-kpis" style="margin-bottom:0"></div>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="card panel">
+            <h2>Voix du client</h2>
+            <div class="sub">Détracteurs en priorité</div>
+            <div id="verbatims"></div>
+          </div>
+          <div class="card panel">
+            <h2>Heatmap agences × campagnes</h2>
+            <div class="sub">Score NPS</div>
+            <div class="table-wrap" id="heatmap"></div>
+          </div>
+        </div>
+      </div>
+      <div id="sat-empty" class="empty card" style="display:none">Aucune réponse pour l'instant. Le dashboard s'alimentera dès les premières réponses.</div>
+    </section>
+
+    <!-- ===================== PROSPECTION ===================== -->
+    <section class="view" id="view-prospection">
+      <div class="toolbar">
+        <select id="p-statut"><option value="">Tous les statuts</option></select>
+        <select id="p-agence"><option value="">Toutes les agences</option></select>
+        <input type="text" id="p-search" placeholder="Rechercher nom / email…" />
+        <div class="spacer"></div>
+        <button class="btn ghost" id="p-refresh">Actualiser</button>
+      </div>
+      <div id="p-notice"></div>
+      <div class="kpis" id="p-kpis"></div>
+      <div class="card panel"><div class="table-wrap"><table id="t-leads"></table></div>
+        <div id="p-empty" class="empty" style="display:none">Aucun lead pour ces filtres.</div>
+      </div>
+    </section>
+
+    <!-- ===================== REQUÊTE ===================== -->
+    <section class="view" id="view-requete">
+      <div class="card panel">
+        <h2>Importer la requête du mois</h2>
+        <div class="sub">Fichier <span class="mono">.xlsx</span> des clients à interroger. Nettoyage encodage, dédoublonnage e-mail, exclusions (résilié non paiement, e-mail manquant), mapping agences, auto-création des conseillers depuis « Gestionnaire ». Le motif est laissé au choix du répondant.</div>
+        <div class="toolbar">
+          <label class="fld">Campagne <input type="month" id="r-campagne" /></label>
+          <div class="spacer"></div>
+          <label class="filelabel"><span class="btn">Choisir le fichier .xlsx</span>
+            <input type="file" id="r-file" accept=".xlsx,.xls" /></label>
+        </div>
+        <div id="r-notice"></div>
+        <div id="r-report"></div>
+      </div>
+
+      <div class="card panel">
+        <h2>Importer les sinistres clos du mois</h2>
+        <div class="sub">Fichier <span class="mono">.xlsx</span> des sinistres clôturés (colonnes <span class="mono">num_sinistre, email, portable, gestionnaire…</span>). Ces clients reçoivent le questionnaire <b>adapté sinistre</b> (motif pré-rempli). Gestionnaire = conseiller ; agence résolue depuis le conseiller si connu. À importer <b>après</b> la requête générale.</div>
+        <div class="toolbar">
+          <label class="fld">Campagne <input type="month" id="s-campagne" /></label>
+          <div class="spacer"></div>
+          <label class="filelabel"><span class="btn">Choisir le fichier .xlsx</span>
+            <input type="file" id="s-file" accept=".xlsx,.xls" /></label>
+        </div>
+        <div id="s-notice"></div>
+        <div id="s-report"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+// ============================ CONFIG ============================
+const SB_URL  = "https://xizitftoejfxaizztzeu.supabase.co";
+const SB_ANON = "sb_publishable_TuAsNz3zhWxY1cRjEwtZOA_FPVfwzQK";
+const sb = window.supabase.createClient(SB_URL, SB_ANON);
+
+// Palette ANSET (charte)
+const PAL = { blue:"#1C509D", ciel:"#6A9BAF", corail:"#D36F6B", moutarde:"#E69D46", menthe:"#77AA92", mauve:"#715689" };
+const STATUT_LABELS = { nouveau:"Nouveau", a_contacter:"À contacter", injoignable:"Injoignable", rappel:"Rappel",
+  interesse:"Intéressé", devis:"Devis", souscrit:"Souscrit", sans_suite:"Sans suite", ne_pas_contacter:"Ne pas contacter" };
+const STATUTS = Object.keys(STATUT_LABELS);
+const MOTIF_LABELS = { souscription:"Souscription", sinistre:"Sinistre", gestion:"Gestion de contrat",
+  reclamation:"Réclamation", information:"Information / conseil", autre:"Autre" };
+const MOTIF_COLORS = { souscription:PAL.blue, sinistre:PAL.corail, gestion:PAL.ciel,
+  reclamation:PAL.moutarde, information:PAL.menthe, autre:PAL.mauve };
+
+// ---- utils ----
+const $ = s => document.querySelector(s);
+const esc = s => (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+const norm = s => (s||"").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
+const fmt = (v,d=1)=> v==null||v===""?"—":Number(v).toFixed(d);
+const pct = v => v==null?"—":Number(v).toFixed(0)+"%";
+const scoreColor = v => v==null?"var(--muted)": v<0?PAL.corail : v<30?PAL.moutarde : v<50?PAL.menthe : PAL.blue;
+const csatColor  = v => v==null?"var(--muted)": v<3?PAL.corail : v<4?PAL.moutarde : PAL.menthe;
+const tauxColor  = v => v==null?"var(--muted)": v<10?PAL.corail : v<15?PAL.moutarde : PAL.menthe;
+let currentUserEmail = null;
+
+// ---- SVG ----
+function sparkline(vals,{w=88,h=26,color=PAL.blue}={}) {
+  const clean = vals.filter(v=>v!=null);
+  if (clean.length<2) return "";
+  const min=Math.min(...clean), max=Math.max(...clean), rng=(max-min)||1;
+  const pts = vals.map((v,i)=> v==null?null:`${(i/(vals.length-1)*w).toFixed(1)},${(h-((v-min)/rng)*(h-4)-2).toFixed(1)}`).filter(Boolean).join(" ");
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polyline fill="none" stroke="${color}" stroke-width="2" points="${pts}"/></svg>`;
+}
+function lineChartNPS(series) { // [{campagne, score}]
+  const w=560,h=190,pl=34,pr=12,pt=14,pb=26;
+  const pts = series.filter(s=>s.score!=null);
+  if (pts.length<1) return '<div class="empty">Pas encore de données.</div>';
+  const vals = pts.map(s=>s.score).concat([0,30]);
+  let lo=Math.min(...vals), hi=Math.max(...vals); const pad=(hi-lo)*0.15||10; lo-=pad; hi+=pad;
+  const X=i=> pl+(series.length<=1?0:i/(series.length-1))*(w-pl-pr);
+  const Y=v=> pt+(1-(v-lo)/((hi-lo)||1))*(h-pt-pb);
+  const line = series.map((s,i)=> s.score==null?null:`${X(i).toFixed(1)},${Y(s.score).toFixed(1)}`).filter(Boolean).join(" ");
+  const dots = series.map((s,i)=> s.score==null?"":`<circle cx="${X(i).toFixed(1)}" cy="${Y(s.score).toFixed(1)}" r="3.5" fill="${scoreColor(s.score)}"/>`).join("");
+  const labels = series.map((s,i)=>`<text x="${X(i).toFixed(1)}" y="${h-8}" font-size="9" fill="var(--muted)" text-anchor="middle">${esc(s.campagne.slice(2))}</text>`).join("");
+  const yTicks=[lo,(lo+hi)/2,hi].map(v=>`<text x="4" y="${(Y(v)+3).toFixed(1)}" font-size="9" fill="var(--muted)">${v.toFixed(0)}</text>`).join("");
+  const target = (30>=lo&&30<=hi)?`<line x1="${pl}" y1="${Y(30).toFixed(1)}" x2="${w-pr}" y2="${Y(30).toFixed(1)}" stroke="${PAL.menthe}" stroke-width="1" stroke-dasharray="4 3"/>`:"";
+  const zero = (0>=lo&&0<=hi)?`<line x1="${pl}" y1="${Y(0).toFixed(1)}" x2="${w-pr}" y2="${Y(0).toFixed(1)}" stroke="var(--border)" stroke-width="1"/>`:"";
+  return `<svg width="100%" viewBox="0 0 ${w} ${h}" style="max-width:100%">${yTicks}${zero}${target}
+    <polyline fill="none" stroke="${PAL.blue}" stroke-width="2.5" points="${line}"/>${dots}${labels}</svg>`;
+}
+
+// ============================ AUTH GATE ============================
+async function boot() {
+  const { data } = await sb.auth.getSession();
+  setAuth(!!data.session, data.session?.user?.email);
+}
+function setAuth(logged, email) {
+  $("#gate").style.display = logged?"none":"flex";
+  $("#app").style.display  = logged?"block":"none";
+  currentUserEmail = email||null;
+  $("#who").textContent = email||"";
+  if (logged) loadDashboard();
+}
+$("#gate-btn").addEventListener("click", async ()=>{
+  const email=$("#gate-email").value.trim(), password=$("#gate-pass").value;
+  $("#gate-err").innerHTML="";
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) { $("#gate-err").innerHTML=`<div class="notice err">${esc(error.message)}</div>`; return; }
+  setAuth(true, data.user?.email);
+});
+$("#gate-pass").addEventListener("keydown", e=>{ if(e.key==="Enter") $("#gate-btn").click(); });
+$("#logout").addEventListener("click", async ()=>{ await sb.auth.signOut(); setAuth(false); });
+
+// tabs
+document.querySelectorAll(".tab").forEach(t=> t.addEventListener("click", ()=>{
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+  document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
+  t.classList.add("active");
+  $("#view-"+t.dataset.view).classList.add("active");
+  if (t.dataset.view==="prospection") loadLeads();
+  if (t.dataset.view==="requete") { const m=new Date().toISOString().slice(0,7);
+    if(!$("#r-campagne").value) $("#r-campagne").value=m; if(!$("#s-campagne").value) $("#s-campagne").value=m; }
+}));
+
+// ============================ DASHBOARD (Satisfaction) ============================
+const D = {}; // caches
+async function loadDashboard() {
+  const q = (t,cols,opts={}) => sb.from(t).select(cols).then(r=>r.data||[]);
+  const [reseau, zones, agences, conseillers, taux, verbatims, agTable, motifs, rs] = await Promise.all([
+    sb.from("v_satisfaction_reseau").select("*").then(r=>r.data||[]),
+    sb.from("v_satisfaction_zone").select("*").then(r=>r.data||[]),
+    sb.from("v_satisfaction_agence").select("*").then(r=>r.data||[]),
+    sb.from("v_satisfaction_conseiller").select("*").then(r=>r.data||[]),
+    sb.from("v_taux_reponse").select("*").then(r=>r.data||[]),
+    sb.from("v_verbatims").select("*").order("date_reponse",{ascending:false}).limit(300).then(r=>r.data||[]),
+    sb.from("agences").select("nom,zone").then(r=>r.data||[]),
+    sb.from("v_satisfaction_motif").select("*").then(r=>r.data||[]),
+    sb.from("v_reseaux_sociaux").select("*").then(r=>r.data||[]),
+  ]);
+  D.reseau=reseau; D.zones=zones; D.conseillers=conseillers; D.taux=taux; D.verbatims=verbatims; D.motifs=motifs; D.rs=rs;
+  // agence view : normaliser nps_score -> score_nps + rattacher zone + taux
+  const zoneByNom={}; agTable.forEach(a=>zoneByNom[a.nom]=a.zone);
+  const tauxKey={}; taux.forEach(t=>tauxKey[t.campagne+"|"+t.agence]=t.taux_reponse);
+  D.agences = agences.map(a=>({ ...a, score_nps:a.nps_score, zone:zoneByNom[a.agence]||"—",
+    taux_reponse: tauxKey[a.campagne+"|"+a.agence] ?? null }));
+
+  D.campagnes = [...new Set(reseau.map(r=>r.campagne).filter(Boolean))].sort();
+  const hasData = D.campagnes.length>0;
+  $("#sat-body").style.display = hasData?"block":"none";
+  $("#sat-empty").style.display = hasData?"none":"block";
+  if (!hasData) return;
+
+  // filtres
+  const fc=$("#f-campagne"); fc.innerHTML=D.campagnes.map(c=>`<option>${c}</option>`).join("");
+  fc.value=D.campagnes[D.campagnes.length-1];
+  const zoneVals=[...new Set(D.agences.map(a=>a.zone).filter(z=>z&&z!=="—"))].sort();
+  $("#f-zone").innerHTML='<option value="">Toutes</option>'+zoneVals.map(z=>`<option>${esc(z)}</option>`).join("");
+  const agVals=[...new Set(D.agences.map(a=>a.agence).filter(Boolean))].sort();
+  $("#f-agence").innerHTML='<option value="">Toutes</option>'+agVals.map(a=>`<option>${esc(a)}</option>`).join("");
+  renderDashboard();
+}
+["#f-campagne","#f-zone","#f-agence"].forEach(s=> $(s).addEventListener("change", renderDashboard));
+$("#sat-refresh").addEventListener("click", loadDashboard);
+
+function delta(cur, prev) {
+  if (cur==null||prev==null) return `<span class="delta flat">—</span>`;
+  const d=cur-prev, cls=d>0.05?"up":d<-0.05?"down":"flat", arr=d>0.05?"▲":d<-0.05?"▼":"=";
+  return `<span class="delta ${cls}">${arr} ${d>0?"+":""}${d.toFixed(1)}</span>`;
+}
+function tile(lbl,val,deltaHtml,foot,spark) {
+  return `<div class="card kpi"><div class="lbl">${lbl}</div>
+    <div class="val num">${val} ${deltaHtml||""}</div>
+    <div class="foot">${foot||"&nbsp;"}</div>${spark?`<div class="spark">${spark}</div>`:""}</div>`;
+}
+
+function renderDashboard() {
+  const camp=$("#f-campagne").value, fz=$("#f-zone").value, fa=$("#f-agence").value;
+  const idx=D.campagnes.indexOf(camp);
+  const r = D.reseau.find(x=>x.campagne===camp) || {};
+  const rPrev = idx>0 ? D.reseau.find(x=>x.campagne===D.campagnes[idx-1]) : null;
+  const serie = f => D.campagnes.map(c=>{ const row=D.reseau.find(x=>x.campagne===c); return row?row[f]:null; });
+
+  // KPI
+  $("#kpis").innerHTML = [
+    tile("Score NPS", `<span style="color:${scoreColor(r.score_nps)}">${r.score_nps??"—"}</span>`,
+      delta(r.score_nps, rPrev?.score_nps), `${r.promoteurs||0} prom. · ${r.detracteurs||0} détr.`, sparkline(serie("score_nps"),{color:PAL.blue})),
+    tile("NPS moyen", fmt(r.nps_moyen,1), delta(r.nps_moyen,rPrev?.nps_moyen), "sur 10", sparkline(serie("nps_moyen"),{color:PAL.ciel})),
+    tile("CSAT global", fmt(r.csat_global,2), delta(r.csat_global,rPrev?.csat_global), "sur 5", sparkline(serie("csat_global"),{color:PAL.menthe})),
+    tile("CSAT conseiller", fmt(r.csat_conseiller,2), delta(r.csat_conseiller,rPrev?.csat_conseiller), "sur 5", sparkline(serie("csat_conseiller"),{color:PAL.mauve})),
+    tile("Taux de réponse", pct(r.taux_reponse), "", `${r.reponses||0} rép. / ${r.envoyes||0} env.`, sparkline(serie("taux_reponse"),{color:PAL.moutarde})),
+    tile("Consentement", pct(r.taux_consentement), "", `${r.consentements||0} leads générés`, sparkline(serie("taux_consentement"),{color:PAL.corail})),
+    (()=>{ const rs=(D.rs||[]).find(x=>x.campagne===camp)||{};
+      const rsSerie=D.campagnes.map(c=>{ const row=(D.rs||[]).find(x=>x.campagne===c); return row?row.taux_suivi:null; });
+      return tile("Réseaux sociaux", pct(rs.taux_suivi), "", `${pct(rs.taux_interet)} intéressés · ${rs.suit||0}/${rs.repondu||0}`, sparkline(rsSerie,{color:PAL.mauve})); })(),
+  ].join("");
+
+  // Tendance + composition
+  $("#chart-nps").innerHTML = lineChartNPS(D.campagnes.map(c=>({campagne:c, score:(D.reseau.find(x=>x.campagne===c)||{}).score_nps ?? null})));
+  $("#chart-compo").innerHTML = D.campagnes.slice(-6).map(c=>{
+    const x=D.reseau.find(v=>v.campagne===c)||{}; const tot=(x.promoteurs||0)+(x.passifs||0)+(x.detracteurs||0)||1;
+    const seg=(n,col)=> n?`<span style="width:${100*n/tot}%;background:${col}"></span>`:"";
+    return `<div class="row"><span class="faint">${esc(c.slice(2))}</span>
+      <div class="bar">${seg(x.promoteurs,PAL.menthe)}${seg(x.passifs,PAL.moutarde)}${seg(x.detracteurs,PAL.corail)}</div></div>`;
+  }).join("") + `<div class="row" style="margin-top:6px"><span></span><div style="font-size:11px;color:var(--muted)">
+    <span class="dot" style="background:${PAL.menthe}"></span>Prom. <span class="dot" style="background:${PAL.moutarde}"></span>Passifs <span class="dot" style="background:${PAL.corail}"></span>Détr.</div></div>`;
+
+  // Zones (campagne)
+  const zrows=D.zones.filter(z=>z.campagne===camp && z.zone).sort((a,b)=>(b.score_nps??-999)-(a.score_nps??-999));
+  const moy=r.score_nps;
+  $("#zones").innerHTML = zrows.length? zrows.map(z=>{
+    const v=z.score_nps??0; const wpos=Math.max(0,Math.min(100,(v+100)/2));
+    return `<div class="hbar"><span>${esc(z.zone)} <span class="faint">(${z.reponses})</span></span>
+      <div class="track"><div class="fill" style="width:${wpos}%;background:${scoreColor(z.score_nps)}"></div></div>
+      <span class="num" style="text-align:right;color:${scoreColor(z.score_nps)};font-weight:700">${z.score_nps??"—"}</span></div>`;
+  }).join("") + (moy!=null?`<div class="faint" style="font-size:11.5px;margin-top:6px">Moyenne réseau : <b>${moy}</b></div>`:"") : '<div class="empty">—</div>';
+
+  // Agences (campagne, filtre zone)
+  let arows=D.agences.filter(a=>a.campagne===camp && (!fz||a.zone===fz));
+  arows.sort((a,b)=>(b.score_nps??-999)-(a.score_nps??-999));
+  $("#ag-sub").textContent = `Campagne ${camp}${fz?" · zone "+fz:""} · trié par Score NPS`;
+  const agSerie = ag => D.campagnes.map(c=>{ const row=D.agences.find(x=>x.campagne===c&&x.agence===ag); return row?row.score_nps:null; });
+  $("#t-agences").innerHTML = `<thead><tr>
+    <th>Agence</th><th>Zone</th><th class="n">n</th><th class="n">Tx rép.</th><th class="n">Score NPS</th>
+    <th class="n">NPS moy</th><th class="n">CSAT glob</th><th class="n">CSAT cons</th><th>12 mois</th></tr></thead><tbody>`+
+    (arows.length? arows.map(a=>{
+      const prev=idx>0?D.agences.find(x=>x.campagne===D.campagnes[idx-1]&&x.agence===a.agence):null;
+      return `<tr><td><b>${esc(a.agence)}</b></td><td class="faint">${esc(a.zone)}</td>
+        <td class="n">${a.reponses}</td>
+        <td class="n" style="color:${tauxColor(a.taux_reponse)}">${pct(a.taux_reponse)}</td>
+        <td class="n" style="font-weight:700"><span class="dot" style="background:${scoreColor(a.score_nps)}"></span>${a.score_nps??"—"} ${delta(a.score_nps,prev?.score_nps)}</td>
+        <td class="n">${fmt(a.nps_moyen,1)}</td>
+        <td class="n" style="color:${csatColor(a.csat_global)}">${fmt(a.csat_global,2)}</td>
+        <td class="n" style="color:${csatColor(a.csat_conseiller)}">${fmt(a.csat_conseiller,2)}</td>
+        <td>${sparkline(agSerie(a.agence),{color:scoreColor(a.score_nps)})}</td></tr>`;
+    }).join("") : `<tr><td colspan="9" class="empty">Aucune donnée.</td></tr>`)+`</tbody>`;
+
+  // Conseillers (campagne, filtre zone/agence)
+  let crows=D.conseillers.filter(c=>c.campagne===camp && (!fa||c.agence===fa) && (!fz|| (D.agences.find(a=>a.agence===c.agence)?.zone)===fz));
+  crows.sort((a,b)=>(b.score_nps??-999)-(a.score_nps??-999));
+  $("#cons-sub").textContent = `Campagne ${camp}${fa?" · agence "+fa:fz?" · zone "+fz:""} · trié par Score NPS`;
+  const cSerie = id => D.campagnes.map(c=>{ const row=D.conseillers.find(x=>x.campagne===c&&x.conseiller_id===id); return row?row.score_nps:null; });
+  $("#t-conseillers").innerHTML = `<thead><tr>
+    <th>Conseiller</th><th>Agence</th><th class="n">n</th><th class="n">Tx rép.</th><th class="n">Score NPS</th>
+    <th class="n">CSAT cons</th><th class="n">Leads</th><th>12 mois</th></tr></thead><tbody>`+
+    (crows.length? crows.map(c=>{
+      const prev=idx>0?D.conseillers.find(x=>x.campagne===D.campagnes[idx-1]&&x.conseiller_id===c.conseiller_id):null;
+      return `<tr><td><b>${esc(c.conseiller_nom||c.conseiller_id)}</b></td><td class="faint">${esc(c.agence||"—")}</td>
+        <td class="n">${c.reponses}</td>
+        <td class="n" style="color:${tauxColor(c.taux_reponse)}">${pct(c.taux_reponse)}</td>
+        <td class="n" style="font-weight:700"><span class="dot" style="background:${scoreColor(c.score_nps)}"></span>${c.score_nps??"—"} ${delta(c.score_nps,prev?.score_nps)}</td>
+        <td class="n" style="color:${csatColor(c.csat_conseiller)}">${fmt(c.csat_conseiller,2)}</td>
+        <td class="n">${c.consentements||0}</td>
+        <td>${sparkline(cSerie(c.conseiller_id),{color:scoreColor(c.score_nps)})}</td></tr>`;
+    }).join("") : `<tr><td colspan="8" class="empty">Pas encore de réponses rattachées à un conseiller.</td></tr>`)+`</tbody>`;
+
+  // Par motif (niveau réseau : le motif n'est pas ventilé par agence/zone)
+  const mrows=D.motifs.filter(m=>m.campagne===camp && m.motif).sort((a,b)=>(b.reponses||0)-(a.reponses||0));
+  $("#motif-sub").textContent = `Campagne ${camp} · réseau · trié par volume`;
+  $("#t-motifs").innerHTML = `<thead><tr><th>Motif</th><th class="n">n</th><th class="n">Score NPS</th><th class="n">CSAT glob</th></tr></thead><tbody>`+
+    (mrows.length? mrows.map(m=>`<tr>
+      <td><span class="dot" style="background:${MOTIF_COLORS[m.motif]||'var(--muted)'}"></span>${esc(MOTIF_LABELS[m.motif]||m.motif)}</td>
+      <td class="n">${m.reponses}</td>
+      <td class="n" style="font-weight:700;color:${scoreColor(m.score_nps)}">${m.score_nps??"—"}</td>
+      <td class="n" style="color:${csatColor(m.csat_global)}">${fmt(m.csat_global,2)}</td></tr>`).join("")
+      : `<tr><td colspan="4" class="empty">Aucun motif renseigné pour cette campagne.</td></tr>`)+`</tbody>`;
+
+  // Carte Sinistres clos (motif = sinistre de la campagne)
+  const sin=D.motifs.find(m=>m.campagne===camp && m.motif==="sinistre");
+  const sinPrev=idx>0?D.motifs.find(m=>m.campagne===D.campagnes[idx-1] && m.motif==="sinistre"):null;
+  const sinSerie=f=>D.campagnes.map(c=>{ const row=D.motifs.find(m=>m.campagne===c&&m.motif==="sinistre"); return row?row[f]:null; });
+  $("#sinistre-kpis").innerHTML = sin ? [
+    tile("Score NPS", `<span style="color:${scoreColor(sin.score_nps)}">${sin.score_nps??"—"}</span>`,
+      delta(sin.score_nps,sinPrev?.score_nps), `${sin.reponses||0} rép.`, sparkline(sinSerie("score_nps"),{color:PAL.corail})),
+    tile("Gestion du sinistre", fmt(sin.csat_sinistre,2), delta(sin.csat_sinistre,sinPrev?.csat_sinistre), "sur 5", sparkline(sinSerie("csat_sinistre"),{color:PAL.menthe})),
+    tile("Délai d'indemnisation", fmt(sin.delai_indemnisation,2), delta(sin.delai_indemnisation,sinPrev?.delai_indemnisation), "sur 5", sparkline(sinSerie("delai_indemnisation"),{color:PAL.moutarde})),
+  ].join("") : `<div class="empty">Pas encore de réponses « sinistre » pour cette campagne. Importez la liste des sinistres clos dans l'onglet Requête.</div>`;
+
+  // Verbatims (campagne + filtres)
+  let vb=D.verbatims.filter(v=>v.campagne===camp && (!fa||v.agence===fa) && (!fz||(D.agences.find(a=>a.agence===v.agence)?.zone)===fz));
+  vb.sort((a,b)=> (b.detracteur?1:0)-(a.detracteur?1:0));
+  $("#verbatims").innerHTML = vb.length? vb.slice(0,40).map(v=>`
+    <div class="vb ${v.detracteur?"det":""}">${esc(v.commentaire)}
+      <div class="meta">${esc(v.agence||"—")}${v.conseiller_id?" · "+esc(v.conseiller_id):""} · ${(v.date_reponse||"").slice(0,10)} · NPS ${v.nps??"—"} · CSAT ${v.satisfaction_globale??"—"}</div></div>`).join("")
+    : '<div class="empty">Aucun commentaire.</div>';
+
+  // Heatmap agences × campagnes
+  const camps=D.campagnes.slice(-8);
+  const agNames=[...new Set(D.agences.filter(a=>!fz||a.zone===fz).map(a=>a.agence))].sort();
+  $("#heatmap").innerHTML = `<table class="heat"><tr><td></td>${camps.map(c=>`<td class="collbl">${esc(c.slice(2))}</td>`).join("")}</tr>`+
+    agNames.map(ag=>`<tr><td class="rowlbl">${esc(ag)}</td>`+camps.map(c=>{
+      const row=D.agences.find(x=>x.campagne===c&&x.agence===ag);
+      const v=row?row.score_nps:null;
+      return `<td>${v==null?'<div class="cell" style="background:var(--surface-2)"></div>':`<div class="cell" style="background:${scoreColor(v)}" title="${esc(ag)} ${c}: ${v}">${v}</div>`}</td>`;
+    }).join("")+`</tr>`).join("")+`</table>`;
+}
+
+// ============================ PROSPECTION ============================
+let leads=[];
+$("#p-statut").innerHTML='<option value="">Tous les statuts</option>'+STATUTS.map(s=>`<option value="${s}">${STATUT_LABELS[s]}</option>`).join("");
+["#p-statut","#p-agence","#p-search"].forEach(s=>$(s).addEventListener("input", renderLeads));
+$("#p-refresh").addEventListener("click", loadLeads);
+function pNotice(m,k="ok"){ $("#p-notice").innerHTML=`<div class="notice ${k}">${esc(m)}</div>`; setTimeout(()=>$("#p-notice").innerHTML="",4000); }
+
+async function loadLeads() {
+  const { data, error } = await sb.from("leads")
+    .select("id,response_id,nom,prenom,email,telephone,agence,campagne,conseiller_id,statut,created_at")
+    .order("created_at",{ascending:false});
+  if (error) { pNotice("Chargement échoué : "+error.message,"err"); return; }
+  leads=data||[];
+  const ags=[...new Set(leads.map(l=>l.agence).filter(Boolean))].sort();
+  $("#p-agence").innerHTML='<option value="">Toutes les agences</option>'+ags.map(a=>`<option>${esc(a)}</option>`).join("");
+  renderLeads();
+}
+function renderLeads() {
+  const st=$("#p-statut").value, ag=$("#p-agence").value, qq=norm($("#p-search").value);
+  const rows=leads.filter(l=>(!st||l.statut===st)&&(!ag||l.agence===ag)&&(!qq||norm([l.nom,l.prenom,l.email].filter(Boolean).join(" ")).includes(qq)));
+  const by={}; leads.forEach(l=>by[l.statut]=(by[l.statut]||0)+1);
+  $("#p-kpis").innerHTML=[
+    tile("Leads (total)", leads.length,"",""),
+    tile("Nouveaux", by.nouveau||0,"","à traiter"),
+    tile("En cours",(by.a_contacter||0)+(by.rappel||0)+(by.injoignable||0)+(by.interesse||0)+(by.devis||0),"",""),
+    tile("Souscrits", by.souscrit||0,"",""),
+  ].join("");
+  $("#p-empty").style.display=rows.length?"none":"block";
+  $("#t-leads").innerHTML=`<thead><tr><th>Client</th><th>Contact</th><th>Agence</th><th>Campagne</th><th>Conseiller</th><th>Statut</th><th></th></tr></thead><tbody>`+
+    rows.map(l=>{ const nom=[l.prenom,l.nom].filter(Boolean).join(" ")||"—";
+      const contact=[l.telephone,l.email].filter(Boolean).map(esc).join("<br>")||"—";
+      const opts=STATUTS.map(s=>`<option value="${s}" ${s===l.statut?"selected":""}>${STATUT_LABELS[s]}</option>`).join("");
+      return `<tr><td>${esc(nom)}</td><td class="mono">${contact}</td><td>${esc(l.agence||"—")}</td>
+        <td>${esc(l.campagne||"—")}</td><td>${esc(l.conseiller_id||"—")}</td>
+        <td><span class="pill st-${l.statut}">${STATUT_LABELS[l.statut]||l.statut}</span></td>
+        <td><select class="lead-st" data-id="${l.id}">${opts}</select> <button class="btn ghost lead-note" data-id="${l.id}">Note</button></td></tr>`;
+    }).join("")+`</tbody>`;
+  document.querySelectorAll(".lead-st").forEach(s=>s.addEventListener("change",onStatut));
+  document.querySelectorAll(".lead-note").forEach(b=>b.addEventListener("click",onNote));
+}
+async function onStatut(e){ const id=e.target.dataset.id, statut=e.target.value;
+  const { error }=await sb.from("leads").update({statut}).eq("id",id);
+  if (error){ pNotice("MAJ échouée : "+error.message,"err"); return; }
+  const l=leads.find(x=>String(x.id)===String(id)); if(l)l.statut=statut; pNotice("Statut mis à jour."); renderLeads(); }
+async function onNote(e){ const id=e.target.dataset.id; const note=prompt("Note de suivi :"); if(!note||!note.trim())return;
+  const { error }=await sb.from("lead_notes").insert({lead_id:id, note:note.trim(), auteur:currentUserEmail});
+  if (error){ pNotice("Note non enregistrée : "+error.message,"err"); return; } pNotice("Note enregistrée."); }
+
+// ============================ REQUÊTE (import .xlsx) ============================
+let agencesMap=null;
+function fixMojibake(s){ if(!s)return s; if(!/[ÃÂ]/.test(s))return s; try{return decodeURIComponent(escape(s));}catch{return s;} }
+function slugConseiller(g){ return norm(g).replace(/[^a-z0-9.]+/g,".").replace(/^\.+|\.+$/g,""); }
+function nomFromSlug(slug){ return slug.split(".").map(p=>p? p[0].toUpperCase()+p.slice(1):"").join(" ").trim(); }
+
+async function loadAgencesMap(){ if(agencesMap)return agencesMap;
+  const { data }=await sb.from("agences").select("code,nom,zone,active"); agencesMap={};
+  (data||[]).forEach(a=>agencesMap[String(a.code)]={nom:a.nom,zone:a.zone,active:a.active}); return agencesMap; }
+
+// Détection des colonnes (requête générale ET sinistres clos). Les noms de la
+// requête priment ; les colonnes sinistre (num_sinistre, portable, cloture,
+// gestionnaire_corporel) sont ajoutées sans gêner l'autre fichier.
+function mapReqHeaders(h){ const idx={}; h.forEach((x,i)=>{ const n=norm(x);
+  if(n.includes("sinistre"))idx.sinistre=i; else if(n.includes("quittance"))idx.quittance=i;
+  else if(n.includes("cloture"))idx.cloture=i; else if(n.includes("police"))idx.police=i;
+  else if(n.includes("produit"))idx.produit=i; else if(n.startsWith("typq"))idx.typq=i;
+  else if(n==="agence"||n.includes("agence"))idx.agence=i; else if(n.includes("dossier"))idx.dossier=i;
+  else if(n.includes("mail"))idx.email=i; else if(n==="nom")idx.nom=i; else if(n.includes("prenom"))idx.prenom=i;
+  else if(n.includes("tel")||n.includes("portable")||n.includes("mobile"))idx.telephone=i;
+  else if(n.includes("gestionnaire")){ if(n.includes("corporel")) idx.gestionnaire_corp=i; else idx.gestionnaire=i; } });
+  return idx; }
+
+// Import générique. source="requete" (motif choisi par le client) | "sinistre"
+// (motif imposé, questionnaire adapté). Le fichier sinistre n'a pas d'agence :
+// elle reste nulle à l'import et sera choisie par le répondant / héritée si le
+// client figure déjà dans la requête générale du mois.
+async function importFichier(buf, source){
+  const isSin=source==="sinistre";
+  const campagne=(isSin?$("#s-campagne").value:$("#r-campagne").value) || new Date().toISOString().slice(0,7);
+  await loadAgencesMap();
+  const wb=XLSX.read(new Uint8Array(buf),{type:"array"});
+  const aoa=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,defval:""});
+  if(aoa.length<2) throw new Error("Fichier vide.");
+  const idx=mapReqHeaders(aoa[0]);
+  if(idx.email==null) throw new Error("Colonne e-mail introuvable.");
+  const seen=new Set(), rows=[], cons={};
+  const st={total:0,a_envoyer:0,exclu_resilie:0,exclu_email:0,doublons:0,autre:0,conseillers:0};
+  for(let r=1;r<aoa.length;r++){ const row=aoa[r]; st.total++;
+    const g=k=> idx[k]!=null? fixMojibake(String(row[idx[k]]??"").trim()):"";
+    const email=g("email").toLowerCase();
+    // Agence : requête → code numérique via table agences ; sinistre → inconnue.
+    let ag;
+    if(isSin){ ag={nom:null,zone:null,active:true}; }
+    else { const code=String(g("agence")).replace(/[^0-9]/g,"");
+      ag=agencesMap[code]||{nom:"Autre",zone:"(non précisée)",active:true}; if(ag.nom==="Autre") st.autre++; }
+    let statut_envoi="a_envoyer", motif_ex=null;
+    if(!isSin){ const nt=norm(g("typq"));
+      if(nt.includes("resilie")&&nt.includes("non paiement")){ statut_envoi="exclu"; motif_ex="résilié non paiement"; st.exclu_resilie++; } }
+    if(!email && statut_envoi==="a_envoyer"){ statut_envoi="exclu"; motif_ex="pas d'email"; st.exclu_email++; }
+    if(email){ if(seen.has(email)){ st.doublons++; continue; } seen.add(email); }
+    // Conseiller : slug depuis Gestionnaire (sinistre : gestionnaire_corporel en secours).
+    let conseiller_id=null; const gslug=slugConseiller(g("gestionnaire")||(isSin?g("gestionnaire_corp"):""));
+    if(gslug && ag.active!==false){ conseiller_id=gslug;
+      if(!cons[gslug]) cons[gslug]=ag.nom? {id:gslug,nom:nomFromSlug(gslug),agence:ag.nom} : {id:gslug,nom:nomFromSlug(gslug)}; }
+    if(statut_envoi==="a_envoyer") st.a_envoyer++;
+    const req = isSin ? (g("sinistre")||g("dossier")||null) : (g("quittance")||g("dossier")||null);
+    rows.push({ req, campagne, email:email||null, nom:g("nom")||null,
+      prenom:g("prenom")||null, telephone:g("telephone")||null, agence:ag.nom, zone:ag.zone,
+      conseiller_id, produit:g("produit")||null, police:g("police")||null, dossier:g("dossier")||null,
+      motif:isSin?"sinistre":null, statut_envoi, motif_exclusion:motif_ex });
+  }
+  // 1) conseillers d'abord (FK envois/leads)
+  const consList=Object.values(cons); st.conseillers=consList.length;
+  for(let i=0;i<consList.length;i+=200){
+    const { error }=await sb.from("conseillers").upsert(consList.slice(i,i+200),{onConflict:"id",ignoreDuplicates:true});
+    if(error) throw new Error("conseillers : "+error.message);
+  }
+  agencesMap=null; // rechargera si besoin
+  // 2) envois. Nouveaux : insérés (les existants du mois sont préservés).
+  let ins=0;
+  for(let i=0;i<rows.length;i+=500){
+    const batch=rows.slice(i,i+500);
+    const { error }=await sb.from("envois_sondage").upsert(batch,{onConflict:"campagne,email",ignoreDuplicates:true});
+    if(error) throw new Error("envois : "+error.message);
+    ins+=batch.length;
+  }
+  // Sinistre : basculer en motif « sinistre » les clients déjà présents (requête
+  // générale) encore à envoyer → ils reçoivent le questionnaire adapté, agence conservée.
+  if(isSin){
+    const emails=[...seen];
+    for(let i=0;i<emails.length;i+=300){
+      const { error }=await sb.from("envois_sondage").update({motif:"sinistre"})
+        .eq("campagne",campagne).eq("statut_envoi","a_envoyer").in("email",emails.slice(i,i+300));
+      if(error) throw new Error("tag sinistre : "+error.message);
+    }
+  }
+  return { st, campagne, ins, isSin };
+}
+
+function bindImport(fileSel, source, noticeSel, reportSel){
+  const notice=(m,k="ok")=>{ $(noticeSel).innerHTML=`<div class="notice ${k}">${esc(m)}</div>`; };
+  $(fileSel).addEventListener("change", e=>{ const f=e.target.files[0]; if(!f)return;
+    $(reportSel).innerHTML=""; notice("Traitement en cours…");
+    const rd=new FileReader();
+    rd.onload=async ()=>{ try{
+      const { st, campagne, ins, isSin }=await importFichier(rd.result, source);
+      notice(`Campagne ${campagne} : ${ins} ligne(s) intégrée(s) · ${st.conseillers} conseiller(s) créé(s)/à jour.${isSin?" Motif « sinistre » appliqué.":""}`,"ok");
+      $(reportSel).innerHTML=`<div class="kpis" style="margin-top:16px">
+        ${tile("Lignes fichier",st.total,"","")}
+        ${tile("À envoyer",st.a_envoyer,"","invitations")}
+        ${tile("Exclus",st.exclu_resilie+st.exclu_email,"",`${st.exclu_resilie} résiliés · ${st.exclu_email} sans e-mail`)}
+        ${tile("Doublons",st.doublons,"",st.autre?`${st.autre} agence « Autre »`:"")}</div>`;
+    }catch(err){ notice("Import échoué : "+err.message,"err"); } e.target.value=""; };
+    rd.readAsArrayBuffer(f);
+  });
+}
+bindImport("#r-file","requete","#r-notice","#r-report");
+bindImport("#s-file","sinistre","#s-notice","#s-report");
+
+// go
+boot();
+</script>
+</body>
+</html>

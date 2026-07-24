@@ -1,0 +1,8 @@
+# On ne déploie que les pages statiques sur Vercel.
+node_modules
+supabase
+scripts
+package.json
+package-lock.json
+README.md
+.git
