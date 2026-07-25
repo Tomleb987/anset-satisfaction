@@ -94,12 +94,14 @@ Deno.serve(async (req: Request) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const apiKey = Deno.env.get("BREVO_API_KEY");
-  const templateId = parseInt(Deno.env.get("BREVO_TEMPLATE_ID") ?? "0", 10);
-  const formUrl = Deno.env.get("FORM_URL");
+  // .trim() : un espace ou un saut de ligne collé dans le champ secret est
+  // invisible dans l'UI et fait répondre « Key not found » à Brevo.
+  const apiKey = Deno.env.get("BREVO_API_KEY")?.trim();
+  const templateId = parseInt(Deno.env.get("BREVO_TEMPLATE_ID")?.trim() ?? "0", 10);
+  const formUrl = Deno.env.get("FORM_URL")?.trim();
   const sender = {
-    email: Deno.env.get("BREVO_SENDER_EMAIL") ?? undefined,
-    name: Deno.env.get("BREVO_SENDER_NAME") ?? undefined,
+    email: Deno.env.get("BREVO_SENDER_EMAIL")?.trim() || undefined,
+    name: Deno.env.get("BREVO_SENDER_NAME")?.trim() || undefined,
   };
 
   if (!supabaseUrl || !serviceRole) return json({ ok: false, error: "Config Supabase incomplète." }, 500);
