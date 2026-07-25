@@ -21,7 +21,7 @@ Le sondage de satisfaction fonctionne ainsi :
 ## Étape 1 — Compte Brevo & délivrabilité
 
 1. Créer / utiliser le compte **Brevo** d'ANSET : https://www.brevo.com (offre gratuite ≈ 300 e-mails/jour, suffisante pour démarrer ; passer à un plan payant si volume mensuel > 9 000).
-2. **Expéditeur** : *Settings → Senders, Domains & Dedicated IPs → Senders* → ajouter et **valider** une adresse d'envoi, ex. `satisfaction@anset.pf` (un e-mail de validation est envoyé).
+2. **Expéditeur** : *Settings → Senders, Domains & Dedicated IPs → Senders* → ajouter et **valider** une adresse d'envoi, ex. `assurances@anset.pf` (un e-mail de validation est envoyé).
 3. **Délivrabilité (important, ton domaine)** : *Domains* → authentifier le domaine `anset.pf` en publiant les enregistrements **SPF** et **DKIM** fournis par Brevo dans la zone DNS d'ANSET. Sans ça, les e-mails risquent le dossier spam.
 
 ## Étape 2 — Clé API
@@ -37,7 +37,7 @@ Le sondage de satisfaction fonctionne ainsi :
    - **Template name** : `Invitation sondage ANSET`
    - **Subject** : `Votre avis sur ANSET en 1 minute`
    - **Preview text** : `Aidez-nous à améliorer nos services — c'est rapide et confidentiel.`
-   - **From** : l'expéditeur validé à l'étape 1 (`satisfaction@anset.pf`, nom « ANSET »).
+   - **From** : l'expéditeur validé à l'étape 1 (`assurances@anset.pf`, nom « ANSET »).
 3. Choisir l'éditeur **« Code your own / HTML »**.
 4. **Coller le contenu du fichier `scripts/brevo_invitation.html`** (dépôt GitHub) dans l'éditeur de code.
 5. **Save & Activate** le template.
@@ -59,7 +59,7 @@ Ces valeurs sont lues par la fonction `envoi-sondage`. **Deux méthodes** au cho
 | `BREVO_API_KEY` | la clé `xkeysib-…` de l'étape 2 |
 | `BREVO_TEMPLATE_ID` | l'ID du template de l'étape 3 (un nombre) |
 | `FORM_URL` | `https://anset-satisfaction.vercel.app/sondage` |
-| `BREVO_SENDER_EMAIL` | `satisfaction@anset.pf` (l'expéditeur validé) |
+| `BREVO_SENDER_EMAIL` | `assurances@anset.pf` (l'expéditeur validé) |
 | `BREVO_SENDER_NAME` | `ANSET` |
 
 3. Enregistrer. (La prise en compte est immédiate au prochain appel de la fonction.)
@@ -72,7 +72,7 @@ supabase secrets set \
   BREVO_API_KEY=xkeysib-xxxxxxxx \
   BREVO_TEMPLATE_ID=3 \
   FORM_URL=https://anset-satisfaction.vercel.app/sondage \
-  BREVO_SENDER_EMAIL=satisfaction@anset.pf \
+  BREVO_SENDER_EMAIL=assurances@anset.pf \
   BREVO_SENDER_NAME="ANSET"
 ```
 
