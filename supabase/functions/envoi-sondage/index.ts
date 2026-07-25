@@ -19,12 +19,24 @@
 // Secrets/env : BREVO_API_KEY, BREVO_TEMPLATE_ID, FORM_URL,
 //               BREVO_SENDER_EMAIL, BREVO_SENDER_NAME (optionnels si gérés au template),
 //               SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (auto).
+// Env optionnel : ALLOWED_ORIGIN (restreindre le CORS ; défaut "*").
 // =============================================================================
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") ?? "*";
+
+// Appelée depuis le dashboard avec un header Authorization : le navigateur
+// envoie un préflight OPTIONS, qu'il faut autoriser explicitement.
+const CORS = {
+  "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+  "Access-Control-Max-Age": "86400",
+};
+
 const json = (obj: unknown, status = 200) =>
-  new Response(JSON.stringify(obj, null, 2), { status, headers: { "Content-Type": "application/json" } });
+  new Response(JSON.stringify(obj, null, 2), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
 interface EnvoiRow {
   id: string;
@@ -70,6 +82,8 @@ async function envoyerBrevo(
 }
 
 Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+
   const url = new URL(req.url);
   const dry = url.searchParams.get("dry") === "1";
   const testEmail = url.searchParams.get("test");
