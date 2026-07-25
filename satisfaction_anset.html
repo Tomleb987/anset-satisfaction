@@ -311,8 +311,8 @@
         <h2 class="title">Requête du mois</h2>
         <p class="sub">Clients à interroger — fichier <span class="tag-mono">.xlsx</span>.</p>
         <div class="adminrow"><label class="fld">Campagne <input type="month" id="r-campagne"></label></div>
-        <label class="drop"><span class="ic">⬆︎</span><b>Choisir le fichier .xlsx</b><br>requête générale
-          <input type="file" id="r-file" accept=".xlsx,.xls"></label>
+        <label class="drop"><span class="ic">⬆︎</span><b>Choisir le fichier .xlsx / .csv</b><br>requête générale
+          <input type="file" id="r-file" accept=".xlsx,.xls,.csv"></label>
         <p class="sub" style="margin:12px 0 0">Dédoublonnage e-mail · exclusions (résilié non-paiement, e-mail manquant) · mapping agences · conseillers depuis « Gestionnaire ».</p>
         <div id="r-notice"></div><div id="r-report"></div>
       </div>
@@ -320,8 +320,8 @@
         <h2 class="title">Sinistres clos du mois</h2>
         <p class="sub">Clients indemnisés → questionnaire adapté sinistre.</p>
         <div class="adminrow"><label class="fld">Campagne <input type="month" id="s-campagne"></label></div>
-        <label class="drop"><span class="ic">⬆︎</span><b>Choisir le fichier .xlsx</b><br>sinistres clos
-          <input type="file" id="s-file" accept=".xlsx,.xls"></label>
+        <label class="drop"><span class="ic">⬆︎</span><b>Choisir le fichier .xlsx / .csv</b><br>sinistres clos
+          <input type="file" id="s-file" accept=".xlsx,.xls,.csv"></label>
         <p class="sub" style="margin:12px 0 0"><span class="tag-mono">num_sinistre</span>→réf · <span class="tag-mono">gestionnaire</span>→conseiller · <span class="tag-mono">portable</span>→tél · délai réel via <span class="tag-mono">ouverture→clôture</span> · motif=sinistre.</p>
         <div id="s-notice"></div><div id="s-report"></div>
       </div>
@@ -706,7 +706,16 @@ async function importFichier(buf,source){
   const isSin=source==="sinistre";
   const campagne=(isSin?$("#s-campagne").value:$("#r-campagne").value)||new Date().toISOString().slice(0,7);
   await loadAgencesMap();
-  const wb=XLSX.read(new Uint8Array(buf),{type:"array"});
+  // Détection format : xlsx (zip « PK ») / xls (« ÐÏ ») → binaire ; sinon CSV/texte.
+  const bytes=new Uint8Array(buf);
+  const bin=(bytes[0]===0x50&&bytes[1]===0x4B)||(bytes[0]===0xD0&&bytes[1]===0xCF);
+  let wb;
+  if(bin){ wb=XLSX.read(bytes,{type:"array"}); }
+  else { // CSV : UTF-8, repli Windows-1252 si accents cassés ; séparateur auto-détecté
+    let txt=new TextDecoder("utf-8").decode(bytes);
+    if(txt.includes("�")){ try{ txt=new TextDecoder("windows-1252").decode(bytes); }catch{} }
+    wb=XLSX.read(txt,{type:"string"});
+  }
   const aoa=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,defval:""});
   if(aoa.length<2) throw new Error("Fichier vide.");
   const idx=mapReqHeaders(aoa[0]); if(idx.email==null) throw new Error("Colonne e-mail introuvable.");
