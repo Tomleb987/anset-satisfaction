@@ -13,7 +13,8 @@
 //   ?campagne=YYYY-MM cible une campagne précise
 //   ?limit=N          plafonne le lot (défaut 500)
 //   ?dry=1            simule : ne contacte pas Brevo, ne modifie rien
-//   ?test=a@b.pf      TEST : envoie 1 invitation à cette adresse, ne modifie rien
+//   ?test=a@b.pf      TEST : envoie 1 invitation à cette adresse, tout de suite
+//                     (pas de programmation H+2), ne modifie rien
 //
 // Secrets/env : BREVO_API_KEY, BREVO_TEMPLATE_ID, FORM_URL,
 //               BREVO_SENDER_EMAIL, BREVO_SENDER_NAME (optionnels si gérés au template),
@@ -102,7 +103,16 @@ Deno.serve(async (req: Request) => {
     .not("email", "is", null)
     .limit(testEmail ? 1 : limit);
   if (error) return json({ ok: false, error: error.message }, 500);
-  if (!rows || rows.length === 0) return json({ ok: true, campagne, traites: 0, message: "Aucun envoi 'a_envoyer'." });
+  if (!rows || rows.length === 0) {
+    // En test, l'absence de lot est un échec : le lien de test se construit à partir d'une ligne réelle.
+    if (testEmail) {
+      return json({
+        ok: false, test: true, campagne,
+        error: `Aucune ligne « à envoyer » pour la campagne ${campagne} : impossible de construire le lien de test. Importe un lot ou change de campagne.`,
+      }, 409);
+    }
+    return json({ ok: true, campagne, traites: 0, message: "Aucun envoi 'a_envoyer'." });
+  }
 
   // H+2 (envoi à chaud programmé).
   const scheduledAt = new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString();
@@ -112,8 +122,13 @@ Deno.serve(async (req: Request) => {
     const r = rows[0] as EnvoiRow;
     const lien = lienPersonnalise(formUrl, r);
     if (dry) return json({ ok: true, test: true, dry: true, to: testEmail, lien, prenom: r.prenom });
-    const { ok, info } = await envoyerBrevo(apiKey!, templateId, { email: testEmail, name: r.prenom ?? "" }, { lien, prenom: r.prenom ?? "" }, scheduledAt, sender);
-    return json({ ok, test: true, to: testEmail, lien, scheduledAt, brevo: info });
+    // Envoi IMMÉDIAT (pas de scheduledAt) : un test programmé à H+2 n'arriverait que 2 h plus tard.
+    const { ok, info } = await envoyerBrevo(apiKey!, templateId, { email: testEmail, name: r.prenom ?? "" }, { lien, prenom: r.prenom ?? "" }, null, sender);
+    if (!ok) {
+      const detail = (info as { message?: string; code?: string })?.message ?? JSON.stringify(info);
+      return json({ ok: false, test: true, to: testEmail, error: `Brevo a refusé l'envoi : ${detail}`, brevo: info }, 502);
+    }
+    return json({ ok, test: true, to: testEmail, lien, brevo: info });
   }
 
   // --- Mode DRY : aperçu du lot sans envoi ni modification.
