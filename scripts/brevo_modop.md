@@ -135,6 +135,26 @@ supabase secrets set \
   BREVO_SENDER_NAME="ANSET"
 ```
 
+## Étape 4 bis — Sécurité IP Brevo (⚠️ à faire, sinon rien ne part)
+
+Brevo peut bloquer les appels API venant d'une **IP inconnue** (« *We have detected you are using an
+unrecognised IP address …* »). Or la fonction `envoi-sondage` tourne sur l'infra Supabase, dont l'IP de
+sortie **n'est pas fixe** : elle change d'une invocation à l'autre. Mettre une IP en liste blanche ne
+tient donc pas dans le temps.
+
+1. Aller sur https://app.brevo.com/security/authorised_ips *(ou : ton nom en haut à droite → **Security**
+   → **Authorized IPs**)*.
+2. **Désactiver « Block unknown IP addresses »**.
+
+Compromis assumé : la clé API redevient le seul facteur d'authentification. Elle ne vit que dans les
+secrets Supabase (jamais dans le dépôt, jamais dans le HTML public) et reste révocable/rotable en un clic
+depuis *SMTP & API → API Keys*. Garder le blocage IP actif imposerait un serveur d'envoi à IP fixe, donc
+de sortir des Edge Functions : disproportionné pour ce volume.
+
+> À savoir : Brevo applique une « learning phase » qui autorise automatiquement les nouvelles IP au
+> démarrage, puis **active le blocage de lui-même** si aucune nouvelle IP n'apparaît pendant 30 jours.
+> Le blocage peut donc surgir sur un compte qui fonctionnait jusque-là.
+
 ## Étape 5 — Test de bout en bout
 
 Depuis l'app de pilotage : https://anset-satisfaction.vercel.app/satisfaction_anset
@@ -148,6 +168,10 @@ Depuis l'app de pilotage : https://anset-satisfaction.vercel.app/satisfaction_an
 
 - **Rien ne part / erreur config** : un des 5 secrets est manquant ou mal orthographié (respecter les noms exacts, en MAJUSCULES).
 - **Erreur Brevo dans l'aperçu** : clé API invalide, ou expéditeur non validé, ou `BREVO_TEMPLATE_ID` incorrect.
+- **« unrecognised IP address »** : la sécurité IP de Brevo bloque l'appel → étape 4 bis (désactiver
+  « Block unknown IP addresses »). Autoriser l'IP citée débloque le coup suivant seulement : elle change.
+- **Envoi réel partiel** (`envoyes` < lot, `echecs` > 0) : les lignes en échec restent `a_envoyer` — il
+  suffit de relancer « Envoi réel » après correction, aucun doublon (la fonction est idempotente).
 - **E-mails en spam** : authentifier le domaine (SPF/DKIM, étape 1.3).
 - **Le lien du bouton est vide** : la variable `{{ params.lien }}` a été supprimée du template → la remettre.
 - **Logs** : Supabase → *Edge Functions → envoi-sondage → Logs* pour voir le détail des erreurs.
