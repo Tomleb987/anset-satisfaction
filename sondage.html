@@ -2,7 +2,8 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<!-- Pas de maximum-scale : bloquer le zoom viole WCAG 2.1 (1.4.4 Resize text). -->
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
 <title>Votre avis — ANSET</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,15 +12,32 @@
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <style>
   :root {
-    --blue: #1C509D;        /* Bleu foncé ANSET (charte) */
-    --blue-dark: #143a72;
-    --red: #E83C30;         /* rouge TAHITI (logo) */
-    --cream: #F7F9FC;
-    --ink: #1c2534;
-    --muted: #64708a;
-    --border: #dde3ec;
-    --ok: #16a34a;
-    --radius: 14px;
+    /* ---- Palette de marque (charte ANSET) — mêmes valeurs que satisfaction_anset.html
+           et que l'e-mail Brevo : les trois surfaces doivent rester alignées. ---- */
+    --blue: #1C509D;        /* primaire : boutons, sélection, liens */
+    --blue-2: #2f66bb;      /* focus */
+    --blue-dark: #143a72;   /* hover */
+    --blue-soft: #eaf1fb;   /* fond d'une option sélectionnée */
+    --mauve: #715689;       /* 2e teinte du filet de marque (dégradé) */
+    --red: #E83C30;         /* rouge TAHITI : logo uniquement, jamais en UI d'action */
+    --corail: #D36F6B;      /* négatif / détracteur */
+    --moutarde: #E69D46;    /* intermédiaire / passif */
+    --menthe: #77AA92;      /* positif / promoteur */
+    /* Corail assombri pour le TEXTE : le corail pur ne fait que 3,18:1 sur le
+       crème, sous le minimum AA de 4,5:1. Celui-ci monte à 4,82:1. */
+    --corail-dark: #B34F4A;
+    /* --faint (#93a1b8) de l'app n'est pas repris : 2,48:1 sur crème, hors AA. */
+
+    --cream: #F7F9FC;       /* fond de page (formulaire public : clair uniquement) */
+    --surface: #ffffff;     /* carte questionnaire */
+    --surface-2: #f4f7fb;   /* champs et options, DANS la carte blanche */
+    --border: #dbe3ee;
+    --ink: #16233c;
+    --muted: #5d6b83;       /* 5,11:1 sur crème → AA */
+
+    --radius: 16px;
+    --shadow: 0 1px 2px rgba(20,40,80,.04), 0 4px 18px rgba(20,40,80,.07);
+    --grad: linear-gradient(90deg, var(--blue), var(--mauve));
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; }
@@ -30,49 +48,85 @@
     display: flex; flex-direction: column; align-items: center;
     padding: 0 18px;
   }
+  /* Filet de marque en haut de page — reprend l'en-tête de l'e-mail d'invitation. */
+  body::before {
+    content: ""; position: fixed; top: 0; left: 0; right: 0; height: 4px;
+    background: var(--grad); z-index: 10;
+  }
   .wrap { width: 100%; max-width: 480px; display: flex; flex-direction: column; min-height: 100dvh; }
 
-  header { padding: 22px 0 10px; display: flex; align-items: center; gap: 12px; }
+  header { padding: 26px 0 14px; display: flex; align-items: center; gap: 12px; }
   header img.brandlogo { height: 40px; width: auto; }
   header .tagline { color: var(--muted); font-weight: 500; font-size: 14px; border-left: 1px solid var(--border); padding-left: 12px; }
 
-  .progress { height: 6px; background: #ece6db; border-radius: 999px; overflow: hidden; margin-bottom: 26px; }
-  .progress > div { height: 100%; background: var(--blue); border-radius: 999px; transition: width .3s ease; width: 0; }
+  .progress-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .progress { flex: 1; height: 6px; background: var(--border); border-radius: 999px; overflow: hidden; }
+  .progress > div { height: 100%; background: var(--grad); border-radius: 999px; transition: width .3s ease; width: 0; }
+  .stepcount { font-size: 12.5px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-  main { flex: 1; }
-  .step { display: none; animation: fade .25s ease; }
-  .step.active { display: block; }
-  @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  /* La carte questionnaire : une seule surface blanche qui suit la hauteur de l'étape. */
+  main {
+    flex: 1; position: relative; overflow: hidden;
+    background: var(--surface); border: 1.5px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px 20px;
+  }
+  /* Logo en filigrane, décoratif (pointer-events:none pour ne rien intercepter). */
+  main::after {
+    /* 148 × 62 = le ratio réel du logo (854×359) : `contain` ne recadre rien. */
+    content: ""; position: absolute; right: 12px; bottom: 14px; width: 148px; height: 62px;
+    background: url("anset_brand_logo_TAHITI.png") right bottom / contain no-repeat;
+    opacity: .05; pointer-events: none;
+  }
+  main.done::after { display: none; }
 
-  .q { font-size: 22px; font-weight: 700; line-height: 1.3; margin: 0 0 6px; }
-  .hint { color: var(--muted); font-size: 14px; margin: 0 0 22px; }
+  .step { display: none; }
+  .step.active { display: block; animation: stepIn .28s cubic-bezier(.2,.7,.3,1); }
+  main.back .step.active { animation-name: stepBack; }
+  @keyframes stepIn   { from { opacity: 0; transform: translateX(14px); }  to { opacity: 1; transform: none; } }
+  @keyframes stepBack { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .step.active, main.back .step.active { animation: none; }
+    .progress > div { transition: none; }
+  }
+
+  .q { font-size: clamp(22px, 5.6vw, 26px); font-weight: 700; line-height: 1.25; letter-spacing: -.01em; margin: 0 0 6px; }
+  .hint { color: var(--muted); font-size: 14.5px; line-height: 1.45; margin: 0 0 22px; }
 
   .opts { display: grid; gap: 10px; }
   .opt {
-    display: flex; align-items: center; gap: 12px;
-    padding: 16px; border: 1.5px solid var(--border); background: #fff;
-    border-radius: var(--radius); font-size: 16px; cursor: pointer; text-align: left;
+    display: flex; align-items: center; gap: 12px; min-height: 52px;
+    padding: 15px 16px; border: 1.5px solid var(--border); background: var(--surface-2);
+    border-radius: var(--radius); font-size: 16px; color: var(--ink); cursor: pointer; text-align: left;
     transition: border-color .15s, background .15s;
   }
-  .opt:hover { border-color: #cfc6b6; }
-  .opt.sel { border-color: var(--blue); background: #eaf1fb; }
+  .opt:hover { border-color: var(--blue-2); }
+  .opt.sel { border-color: var(--blue); background: var(--blue-soft); font-weight: 500; }
 
   .scale { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
   .scale.s5 { grid-template-columns: repeat(5, 1fr); }
   .scale button {
-    aspect-ratio: 1; border: 1.5px solid var(--border); background: #fff; border-radius: 12px;
-    font-size: 17px; font-weight: 600; color: var(--ink); cursor: pointer;
+    aspect-ratio: 1; min-height: 46px; border: 1.5px solid var(--border);
+    background: var(--surface-2); border-radius: 12px;
+    font-size: 18px; font-weight: 700; font-family: inherit; color: var(--ink); cursor: pointer;
+    font-variant-numeric: tabular-nums; transition: border-color .15s, background .15s;
   }
-  .scale button.sel { background: var(--blue); border-color: var(--blue); color: #fff; }
-  .scalelbl { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .scale button:hover { border-color: var(--blue-2); }
+  /* Remplissage sémantique de la case choisie (mêmes seuils que le dashboard).
+     Texte en --ink et non en blanc : sur ces pastels le blanc tombe à 2,3–3,4:1. */
+  .scale button.sel          { background: var(--blue);     border-color: var(--blue);     color: #fff; }
+  .scale button.sel.detr     { background: var(--corail);   border-color: var(--corail);   color: var(--ink); }
+  .scale button.sel.passif   { background: var(--moutarde); border-color: var(--moutarde); color: var(--ink); }
+  .scale button.sel.prom     { background: var(--menthe);   border-color: var(--menthe);   color: var(--ink); }
+  .scalelbl { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--muted); margin-top: 8px; }
 
   select, input[type=text], input[type=tel], input[type=email], textarea {
-    width: 100%; padding: 14px; border: 1.5px solid var(--border); border-radius: var(--radius);
-    font-size: 16px; font-family: inherit; background: #fff; color: var(--ink);
+    width: 100%; min-height: 52px; padding: 14px; border: 1.5px solid var(--border); border-radius: var(--radius);
+    font-size: 16px; font-family: inherit; background: var(--surface-2); color: var(--ink);
+    accent-color: var(--blue);
   }
   textarea { min-height: 110px; resize: vertical; }
 
-  .consent { display: flex; gap: 12px; align-items: flex-start; padding: 16px; border: 1.5px solid var(--border); border-radius: var(--radius); background: #fff; cursor: pointer; }
+  .consent { display: flex; gap: 12px; align-items: flex-start; padding: 16px; border: 1.5px solid var(--border); border-radius: var(--radius); background: var(--surface-2); cursor: pointer; }
   .consent input { width: 22px; height: 22px; margin-top: 1px; accent-color: var(--blue); flex-shrink: 0; }
   .consent label { font-size: 15px; line-height: 1.4; }
   .contact-fields { display: grid; gap: 10px; margin-top: 14px; }
@@ -80,24 +134,36 @@
 
   .cf-turnstile { margin: 20px 0 4px; }
 
-  footer { padding: 18px 0 26px; }
-  .nav { display: flex; gap: 10px; margin-top: 26px; }
-  .btn {
-    flex: 1; padding: 15px; border: none; border-radius: var(--radius);
-    font-size: 16px; font-weight: 700; font-family: inherit; cursor: pointer;
+  /* État focus visible sur tout ce qui est actionnable (charte : AA + focus visible).
+     :where() garde une spécificité nulle, les règles ci-dessus restent prioritaires. */
+  :where(button, select, input, textarea, a):focus-visible {
+    outline: 3px solid var(--blue-2); outline-offset: 2px;
   }
-  .btn.primary { background: var(--blue); color: #fff; }
-  .btn.primary:disabled { opacity: .5; cursor: not-allowed; }
-  .btn.ghost { background: transparent; color: var(--muted); flex: 0 0 auto; padding: 15px 18px; }
 
-  .rgpd { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin-top: 22px; border-top: 1px solid var(--border); padding-top: 16px; }
+  footer { padding: 18px 0 26px; }
+  .nav { display: flex; gap: 10px; margin-top: 22px; }
+  .btn {
+    flex: 1; min-height: 52px; padding: 15px; border: none; border-radius: var(--radius);
+    font-size: 16px; font-weight: 700; font-family: inherit; cursor: pointer;
+    transition: background .15s, opacity .15s;
+  }
+  .btn.primary { background: var(--blue); color: #fff; box-shadow: var(--shadow); }
+  .btn.primary:hover:not(:disabled) { background: var(--blue-dark); }
+  .btn.primary:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+  .btn.ghost { background: transparent; color: var(--muted); flex: 0 0 auto; padding: 15px 18px; }
+  .btn.ghost:hover { color: var(--ink); }
+
+  .rgpd { font-size: 12px; color: var(--muted); line-height: 1.5; margin-top: 22px; border-top: 1px solid var(--border); padding-top: 16px; }
   .rgpd a { color: var(--blue); }
 
-  .thanks { text-align: center; padding: 60px 0; }
-  .thanks .check { width: 64px; height: 64px; border-radius: 50%; background: var(--ok); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 34px; margin-bottom: 18px; }
-  .thanks h2 { font-size: 24px; margin: 0 0 8px; }
-  .thanks p { color: var(--muted); font-size: 15px; }
-  .err { color: #dc2626; font-size: 14px; margin-top: 12px; text-align: center; }
+  .thanks { text-align: center; padding: 30px 4px 34px; }
+  .thanks .check {
+    width: 64px; height: 64px; border-radius: 50%; background: var(--menthe); color: var(--ink);
+    display: inline-flex; align-items: center; justify-content: center; font-size: 34px; margin-bottom: 18px;
+  }
+  .thanks h2 { font-size: 26px; margin: 0 0 8px; letter-spacing: -.01em; }
+  .thanks p { color: var(--muted); font-size: 15px; line-height: 1.5; margin: 0; }
+  .err { color: var(--corail-dark); font-size: 14px; font-weight: 500; margin-top: 12px; text-align: center; }
 </style>
 </head>
 <body>
@@ -106,7 +172,10 @@
     <img class="brandlogo" src="anset_brand_logo_TAHITI.png" alt="ANSET Assurances Tahiti" />
     <span class="tagline">Votre avis</span>
   </header>
-  <div class="progress"><div id="bar"></div></div>
+  <div class="progress-row" id="progress-row">
+    <div class="progress"><div id="bar"></div></div>
+    <span class="stepcount" id="stepcount"></span>
+  </div>
 
   <main id="form">
     <!-- 1. Interaction -->
@@ -251,13 +320,13 @@
   </footer>
 </div>
 
-<!-- Écran de remerciement -->
+<!-- Écran de remerciement : injecté DANS la carte, l'en-tête et le filet de marque restent. -->
 <template id="thanks-tpl">
-  <div class="wrap"><div class="thanks">
-    <div class="check">✓</div>
+  <div class="thanks">
+    <div class="check" aria-hidden="true">✓</div>
     <h2>Māuruuru !</h2>
     <p>Votre réponse a bien été enregistrée. Elle nous aide à améliorer nos services.</p>
-  </div></div>
+  </div>
 </template>
 
 <script>
@@ -296,14 +365,23 @@ if (urlAgence) {
   else { const o = new Option(urlAgence, urlAgence, true, true); sel.add(o); answers.agence = urlAgence; }
 }
 
+// Couleur de la case sélectionnée : mêmes seuils que le dashboard
+// (détracteur = corail, passif = moutarde, promoteur = menthe).
+// Les échelles 1-5 vont toutes dans le même sens : 5 = le meilleur.
+function categorieNote(field, v) {
+  if (field === "nps") return v <= 6 ? "detr" : v <= 8 ? "passif" : "prom";
+  return v <= 2 ? "detr" : v === 3 ? "passif" : "prom";
+}
+
 // Génère les échelles.
 function buildScale(el, from, to, field) {
   for (let i = from; i <= to; i++) {
     const b = document.createElement("button");
+    b.type = "button";
     b.textContent = i; b.dataset.value = i;
     b.addEventListener("click", () => {
-      [...el.children].forEach(c => c.classList.remove("sel"));
-      b.classList.add("sel");
+      [...el.children].forEach(c => c.classList.remove("sel", "detr", "passif", "prom"));
+      b.classList.add("sel", categorieNote(field, i));
       answers[field] = i;
       updateNav();
     });
@@ -352,7 +430,9 @@ function refreshCommentHint() {
 
 // ---------------------------- Navigation stepper (conditionnelle) ----------
 const allSteps = [...document.querySelectorAll(".step")];
+const formEl = document.getElementById("form");
 const bar = document.getElementById("bar");
+const stepCount = document.getElementById("stepcount");
 const btnNext = document.getElementById("next");
 const btnPrev = document.getElementById("prev");
 let current = allSteps[0];
@@ -362,21 +442,34 @@ let current = allSteps[0];
 //  - data-role="interaction"   → masquée si le motif est déjà connu (lien typé)
 //  - data-role="motif"         → masquée si le motif est déjà connu (lien typé)
 //  - data-motif="sinistre"     → visible seulement si le motif choisi est "sinistre"
-const stepVisible = s => {
+const stepVisibleIn = (s, a) => {
   if (s.dataset.role === "interaction" && motifFromUrl) return false;
-  if (s.dataset.cond && answers[s.dataset.cond] !== true) return false;
+  if (s.dataset.cond && a[s.dataset.cond] !== true) return false;
   if (s.dataset.role === "motif" && motifFromUrl) return false;
-  if (s.dataset.motif && answers.motif !== s.dataset.motif) return false;
+  if (s.dataset.motif && a.motif !== s.dataset.motif) return false;
   return true;
 };
-const visibleSteps = () => allSteps.filter(stepVisible);
+const visibleSteps = () => allSteps.filter(s => stepVisibleIn(s, answers));
+
+// Parcours affiché au compteur. Tant que la 1re question est sans réponse, on
+// projette le parcours « avec interaction » : sinon le total annoncerait 2, puis
+// sauterait à 10 au premier clic. Dès qu'`interaction` est renseigné, cette
+// projection est identique au parcours réel.
+const plannedSteps = () => answers.interaction !== null
+  ? visibleSteps()
+  : allSteps.filter(s => stepVisibleIn(s, { ...answers, interaction: true }));
 
 function updateNav() {
   const vis = visibleSteps();
   if (!vis.includes(current)) current = vis[0];
   allSteps.forEach(s => s.classList.toggle("active", s === current));
   const pos = vis.indexOf(current);
-  bar.style.width = (vis.length > 1 ? pos / (vis.length - 1) * 100 : 0) + "%";
+  // Barre et compteur se lisent sur le parcours projeté (voir plannedSteps).
+  const plan = plannedSteps();
+  const posPlan = plan.indexOf(current);
+  const rang = (posPlan < 0 ? pos : posPlan) + 1;
+  bar.style.width = (rang / plan.length * 100) + "%";
+  stepCount.textContent = `Question ${rang} sur ${plan.length}`;
   btnPrev.style.display = pos === 0 ? "none" : "block";
   const field = current.dataset.field;
   const required = field && current.dataset.optional !== "true";
@@ -393,7 +486,9 @@ function updateNav() {
   }
 }
 
-function goTo(step) {
+// `back` : l'étape entre par la gauche au retour, par la droite à l'avance.
+function goTo(step, back) {
+  formEl.classList.toggle("back", back === true);
   current = step;
   updateNav();
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -401,12 +496,12 @@ function goTo(step) {
 
 btnPrev.addEventListener("click", () => {
   const vis = visibleSteps(); const pos = vis.indexOf(current);
-  if (pos > 0) goTo(vis[pos - 1]);
+  if (pos > 0) goTo(vis[pos - 1], true);
 });
 btnNext.addEventListener("click", () => {
   if (btnNext.disabled) return;
   const vis = visibleSteps(); const pos = vis.indexOf(current);
-  if (pos < vis.length - 1) goTo(vis[pos + 1]);
+  if (pos < vis.length - 1) goTo(vis[pos + 1], false);
   else submit();
 });
 
@@ -468,10 +563,17 @@ async function submit() {
   }
 }
 
+// Le remerciement remplace le contenu de la carte, pas la page : le logo, le
+// filet de marque et la mention RGPD restent visibles.
 function showThanks() {
   const tpl = document.getElementById("thanks-tpl").content.cloneNode(true);
-  document.body.innerHTML = "";
-  document.body.appendChild(tpl);
+  formEl.classList.remove("back");
+  formEl.classList.add("done");
+  formEl.innerHTML = "";
+  formEl.appendChild(tpl);
+  document.getElementById("progress-row").style.display = "none";
+  document.getElementById("nav").style.display = "none";
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 updateNav();
