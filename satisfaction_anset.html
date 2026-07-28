@@ -229,9 +229,10 @@
           <div class="eyebrow">Recommandation client · indice NPS</div>
           <div class="score"><div class="big num" id="h-score">—</div><div id="h-side"></div></div>
           <div class="scale">
-            <div class="scaletrack"><div class="scaletarget" style="left:65%" title="Objectif +30"></div>
+            <!-- Repère et libellé d'objectif positionnés au boot depuis CIBLE_NPS. -->
+            <div class="scaletrack"><div class="scaletarget" id="h-target"></div>
               <div class="scalemark" id="h-mark" style="left:50%"></div></div>
-            <div class="scalelbls"><span>−100</span><span>0</span><span>Objectif +30</span><span>+100</span></div>
+            <div class="scalelbls"><span>−100</span><span>0</span><span id="h-targetlbl"></span><span>+100</span></div>
           </div>
           <div class="herofoot" id="h-foot"></div>
         </div>
@@ -269,7 +270,7 @@
       <div class="grid2" style="margin-top:16px">
         <div class="card pad">
           <h2 class="title">Évolution du NPS</h2>
-          <p class="sub">Par campagne · ligne pointillée = objectif +30</p>
+          <p class="sub" id="nps-trend-sub">Par campagne</p>
           <div id="chart-trend"></div>
         </div>
         <div class="card pad">
@@ -356,6 +357,11 @@ const MOTIF_LABELS={ souscription:"Souscription", sinistre:"Sinistre", gestion:"
   reclamation:"Réclamation", information:"Information / conseil", autre:"Autre" };
 const MOIS=["janv.","févr.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."];
 
+// Objectif de score NPS du réseau. SOURCE UNIQUE : repère de la jauge, libellés,
+// ligne pointillée du graphe, seuils de couleur et verdicts en dépendent tous.
+// (Ne pas confondre avec l'objectif de délai d'indemnisation, en JOURS : voir stDelai.)
+const CIBLE_NPS = 18;
+
 // ---- utils ----
 const $=s=>document.querySelector(s);
 const esc=s=>(s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
@@ -364,14 +370,17 @@ const fmt=(v,d=1)=> v==null||v===""?"—":Number(v).toFixed(d).replace(".",",");
 const pct=v=> v==null?"—":Number(v).toFixed(0)+" %";
 const moisCourt=c=> c?(MOIS[(+c.slice(5,7))-1]||c):"";
 const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-const scoreColor=v=> v==null?cssv("--faint"): v<0?cssv("--bad") : v<30?cssv("--warn") : cssv("--good");
+const scoreColor=v=> v==null?cssv("--faint"): v<0?cssv("--bad") : v<CIBLE_NPS?cssv("--warn") : cssv("--good");
+// Note /5 ramenée sur 100 : 1/5 = 0 %, 5/5 = 100 % (et non moyenne/5, qui
+// plancherait à 20 % pour un client unanimement mécontent).
+const csatPct   =v=> v==null?null:(Number(v)-1)/4*100;
 const csatColor =v=> v==null?cssv("--faint"): v<3?cssv("--bad") : v<4?cssv("--warn") : cssv("--good");
 const tauxColor =v=> v==null?cssv("--faint"): v<10?cssv("--bad") : v<15?cssv("--warn") : cssv("--good");
 const delaiColor=v=> v==null?cssv("--faint"): v<=30?cssv("--good") : v<=40?cssv("--warn") : cssv("--bad");
 let currentUserEmail=null;
 
 // statut/pill dérivés
-function stScore(v){ return v==null?["flat","—"]: v>=30?["good","Bon"]: v>=0?["warn","Correct"]:["bad","À redresser"]; }
+function stScore(v){ return v==null?["flat","—"]: v>=CIBLE_NPS?["good","Bon"]: v>=0?["warn","Correct"]:["bad","À redresser"]; }
 function stCsat(v){ return v==null?["flat","—"]: v>=4?["good","Bon"]: v>=3?["warn","Moyen"]:["bad","Faible"]; }
 function stTaux(v){ return v==null?["flat","—"]: v>=15?["good","Bon"]: v>=10?["warn","Moyen"]:["bad","Faible"]; }
 function stDelai(v){ return v==null?["flat","—"]: v<=30?["good","Dans l'objectif"]: v<=40?["warn","À surveiller"]:["bad","Trop long"]; }
@@ -437,7 +446,16 @@ function tile(k){
 }
 
 // ============================ AUTH ============================
-async function boot(){ const {data}=await sb.auth.getSession(); setAuth(!!data.session, data.session?.user?.email); }
+// Tout ce qui dépend de CIBLE_NPS dans le balisage statique (repère de la jauge,
+// libellé sous la jauge, légende du graphe de tendance).
+function initCible(){
+  const lbl=`Objectif ${CIBLE_NPS>0?"+":""}${CIBLE_NPS}`;
+  $("#h-target").style.left=((CIBLE_NPS+100)/2)+"%";   // −100…+100 projeté sur 0…100 %
+  $("#h-target").title=lbl;
+  $("#h-targetlbl").textContent=lbl;
+  $("#nps-trend-sub").textContent=`Par campagne · ligne pointillée = objectif ${CIBLE_NPS>0?"+":""}${CIBLE_NPS}`;
+}
+async function boot(){ initCible(); const {data}=await sb.auth.getSession(); setAuth(!!data.session, data.session?.user?.email); }
 function setAuth(logged,email){
   $("#gate").style.display=logged?"none":"flex"; $("#app").style.display=logged?"block":"none";
   currentUserEmail=email||null; $("#who").textContent=email||"";
@@ -530,7 +548,13 @@ function renderKPIs(){
   const r=rowFor(camp), rp=rowFor(prevCamp), rsRow=(D.rs.find(x=>x.campagne===camp)||{}), rsPrev=(D.rs.find(x=>x.campagne===prevCamp)||{});
   const K=[];
   let [st,pill]=stCsat(r.csat_global);
-  K.push({lbl:"Satisfaction globale",sig:"moyenne /5",n:fmt(r.csat_global,1),u:"/5",st,pill,ctx:"note moyenne des réponses",delta:deltaTag(r.csat_global,prevCamp?rp.csat_global:null),spark:sparkline(serie("csat_global"),stCol(st))});
+  // Affichée en %, mais le statut/la couleur restent calés sur la note /5
+  // (seuils stCsat 3 et 4 = 50 % et 75 %) : une seule échelle de jugement.
+  const satPct=csatPct(r.csat_global);
+  K.push({lbl:"Satisfaction globale",sig:"note sur 100",n:satPct==null?"—":Math.round(satPct),u:"%",st,pill,
+    ctx:`${fmt(r.csat_global,1)}/5 · ${r.reponses||0} réponse${(r.reponses||0)>1?"s":""}`,
+    delta:deltaTag(satPct,prevCamp?csatPct(rp.csat_global):null,{unit:" pts"}),
+    spark:sparkline(serie("csat_global").map(csatPct),stCol(st))});
   [st,pill]=stCsat(r.csat_conseiller);
   K.push({lbl:"Qualité du conseiller",sig:"écoute, clarté",n:fmt(r.csat_conseiller,1),u:"/5",st,pill,ctx:"note du conseiller",delta:deltaTag(r.csat_conseiller,prevCamp?rp.csat_conseiller:null),spark:sparkline(serie("csat_conseiller"),stCol(st))});
   [st,pill]=stTaux(r.taux_reponse);
@@ -592,8 +616,9 @@ function renderTrend(){
   const data=D.campagnes.map(c=>({c,m:moisCourt(c),v:(rowFor(c).score_nps)})).filter(d=>d.v!=null);
   const cont=$("#chart-trend");
   if(data.length<1){ cont.innerHTML='<div class="empty">Pas encore de données.</div>'; return; }
-  const w=560,h=214,pl=30,pr=16,pt=18,pb=28,n=data.length,target=30;
-  const vals=data.map(d=>d.v).concat([0,30]); let lo=Math.min(...vals),hi=Math.max(...vals); const pad=(hi-lo)*.15||10; lo-=pad; hi+=pad;
+  const w=560,h=214,pl=30,pr=16,pt=18,pb=28,n=data.length,target=CIBLE_NPS;
+  // 0 et la cible restent dans l'échelle : la ligne pointillée est toujours visible.
+  const vals=data.map(d=>d.v).concat([0,target]); let lo=Math.min(...vals),hi=Math.max(...vals); const pad=(hi-lo)*.15||10; lo-=pad; hi+=pad;
   const X=i=> pl+(n<=1?0:i/(n-1))*(w-pl-pr);
   const Y=v=> pt+(1-(v-lo)/((hi-lo)||1))*(h-pt-pb);
   const P=data.map((d,i)=>[X(i),Y(d.v)]);
@@ -604,7 +629,7 @@ function renderTrend(){
   const step=n>1?(w-pl-pr)/(n-1):(w-pl-pr);
   const hits=data.map((d,i)=>{const prev=i>0?data[i-1].v:null,dd=prev==null?"":(d.v-prev>=0?`▲ +${d.v-prev}`:`▼ ${d.v-prev}`);
     return `<rect x="${(X(i)-step/2).toFixed(1)}" y="${pt}" width="${step.toFixed(1)}" height="${(h-pt-pb).toFixed(1)}" fill="transparent" data-i="${i}" data-tip="<b>${d.c}</b><br>Score NPS <b>${d.v>0?'+':''}${d.v}</b>${prev!=null?` · ${dd}`:''}"/>`;}).join("");
-  const tgt=(target>=lo&&target<=hi)?`<line x1="${pl}" y1="${Y(target).toFixed(1)}" x2="${w-pr}" y2="${Y(target).toFixed(1)}" stroke="var(--good)" stroke-width="1.5" stroke-dasharray="5 4"/><text x="${w-pr}" y="${(Y(target)-6).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--good)" font-weight="700">Objectif 30</text>`:"";
+  const tgt=(target>=lo&&target<=hi)?`<line x1="${pl}" y1="${Y(target).toFixed(1)}" x2="${w-pr}" y2="${Y(target).toFixed(1)}" stroke="var(--good)" stroke-width="1.5" stroke-dasharray="5 4"/><text x="${w-pr}" y="${(Y(target)-6).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--good)" font-weight="700">Objectif ${target}</text>`:"";
   cont.innerHTML=`<svg width="100%" viewBox="0 0 ${w} ${h}" style="max-width:100%; overflow:visible">
     <defs><linearGradient id="gl" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="var(--blue)"/><stop offset="1" stop-color="var(--mauve)"/></linearGradient>
       <linearGradient id="ga" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--mauve)" stop-opacity=".18"/><stop offset="1" stop-color="var(--blue)" stop-opacity="0"/></linearGradient></defs>
@@ -624,7 +649,7 @@ function renderAgences(){
   $("#bars-sub").textContent=`Campagne ${camp} · score NPS`;
   if(!ag.length){ $("#bars").innerHTML='<div class="empty">Aucune donnée agence.</div>'; return; }
   $("#bars").innerHTML=ag.map(d=>{ const posPct=(d.v+100)/2, left=Math.min(50,posPct), width=Math.abs(posPct-50);
-    const verd=d.v<0?"à redresser":d.v<30?"correct":"bon";
+    const verd=d.v<0?"à redresser":d.v<CIBLE_NPS?"correct":"bon";
     return `<div class="bar" data-tip="<b>${esc(d.a)}</b><br>Score NPS ${d.v>0?'+':''}${d.v} · ${verd}<br>${d.n} réponses">
       <span>${esc(d.a)}</span>
       <div class="track"><div class="zero" style="left:50%"></div><div class="fill" style="left:${left}%;width:${width}%;background:${scoreColor(d.v)}"></div></div>
