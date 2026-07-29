@@ -80,7 +80,12 @@ les migrations suivantes l'enrichissent. Projet `xizitftoejfxaizztzeu` (eu-west-
 - RLS active sur les tables ; policies `authenticated` (lecture dashboard + écritures
   prospection) définies dans `20260723090600_rls_app.sql`. **Les écritures serveur
   passent en service_role et bypassent la RLS** — ne pas ajouter de policy pour elles.
-- `submit-sondage` est public (`verify_jwt=false`) ; `envoi-sondage` exige un JWT.
+- `submit-sondage` est public (`verify_jwt=false`).
+- `envoi-sondage` : **`verify_jwt=true` ne suffit pas** — la passerelle accepte aussi la clé
+  publishable, qui est en clair dans `satisfaction_anset.html`. La fonction vérifie donc elle-même
+  l'appelant (`auth.getUser`) et n'accepte qu'un **utilisateur connecté** ou la clé **service_role**
+  (relance interne). Ne pas retirer ce contrôle : sans lui, n'importe qui déclenche une diffusion ou
+  s'envoie une invitation via `?test=`. Vérifié : publishable → 401, service_role → 200, user → 200.
 - Toute PII (leads, verbatims nominatifs) reste **derrière login**.
 - Migrations : **additives et idempotentes** (`add column if not exists`,
   `create or replace`, `drop policy if exists` avant `create policy`).

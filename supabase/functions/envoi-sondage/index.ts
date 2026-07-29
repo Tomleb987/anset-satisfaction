@@ -1,5 +1,7 @@
 // =============================================================================
-// ANSET — Edge Function `envoi-sondage`  (verify_jwt=true : manager/service)
+// ANSET — Edge Function `envoi-sondage`  (réservée aux managers connectés)
+// Accès : utilisateur authentifié (JWT vérifié côté fonction, cf. « Authentification »)
+// ou clé service_role pour la relance interne. La clé publishable ne suffit PAS.
 // -----------------------------------------------------------------------------
 // Envoie les invitations au sondage via le RELAIS SMTP Brevo, à partir de la
 // table `envois_sondage` (lignes statut_envoi='a_envoyer' de la campagne du mois).
@@ -129,6 +131,22 @@ Deno.serve(async (req: Request) => {
   if (!dry && !senderEmail) return json({ ok: false, error: "BREVO_SENDER_EMAIL manquant." }, 500);
 
   const supabase = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false } });
+
+  // --- Authentification.
+  // `verify_jwt=true` ne suffit pas : la passerelle accepte aussi la clé publishable,
+  // qui est publique par nature (elle est en clair dans satisfaction_anset.html).
+  // Sans le contrôle ci-dessous, n'importe qui pourrait déclencher une diffusion ou
+  // s'envoyer une invitation ANSET via ?test=. On exige donc :
+  //   - soit un utilisateur réellement connecté (le manager, depuis le dashboard),
+  //   - soit la clé service_role, réservée à la relance interne (voir `relancer`).
+  const bearer = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+  const interne = bearer.length > 0 && bearer === serviceRole;
+  if (!interne) {
+    const { data: auth, error: eAuth } = await supabase.auth.getUser(bearer);
+    if (eAuth || !auth?.user) {
+      return json({ ok: false, error: "Accès refusé : cette action demande d'être connecté à l'app de pilotage." }, 401);
+    }
+  }
 
   // Lot à traiter.
   const { data: rows, error } = await supabase

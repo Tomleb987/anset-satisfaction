@@ -122,6 +122,8 @@ Depuis l'app de pilotage : https://anset-satisfaction.vercel.app/satisfaction_an
 
 ## Vérifications / dépannage
 
+- **« Accès refusé : cette action demande d'être connecté »** : la diffusion est réservée aux comptes
+  connectés à l'app de pilotage. Se reconnecter (une session expirée donne la même erreur).
 - **Rien ne part / erreur config** : un des 5 secrets est manquant ou mal orthographié (respecter les noms exacts, en MAJUSCULES).
 - **« Invalid login » / « authentication failed »** : `BREVO_SMTP_LOGIN` ou `BREVO_SMTP_KEY` incorrect —
   attention à ne pas coller une clé **API** (`xkeysib-…`) à la place de la clé **SMTP** (`xsmtpsib-…`),
