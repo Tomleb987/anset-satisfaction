@@ -197,6 +197,10 @@
     <!-- 2. Agence (si interaction) -->
     <section class="step" data-field="agence" data-cond="interaction">
       <h1 class="q">Dans quelle agence ?</h1>
+      <!-- La liste doit rester alignée sur la table `agences` (13 entrées) : une
+           agence absente d'ici ne peut jamais être déclarée par un client, et son
+           taux de réponse resterait figé à 0 %. Seule « Commerciaux » est écartée
+           volontairement : c'est une équipe, pas un point d'accueil. -->
       <p class="hint">Sélectionnez votre agence habituelle.</p>
       <select id="agence" data-field="agence">
         <option value="">— Choisir —</option>
@@ -208,7 +212,10 @@
         <option>Taravao</option>
         <option>Punaauia</option>
         <option>Papara</option>
+        <option>Paea</option>
+        <option>Polynésie Assurances</option>
         <option>Agence en ligne</option>
+        <option>Site WEB</option>
       </select>
     </section>
 

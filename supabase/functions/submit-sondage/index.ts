@@ -128,10 +128,18 @@ Deno.serve(async (req: Request) => {
     let zone: string | null = null;
 
     if (req_param) {
+      // Un même `req` peut exister dans PLUSIEURS campagnes (le même fichier source
+      // importé sur deux mois). Sans tri, la ligne retenue était arbitraire : les
+      // réponses aux invitations de juin se sont retrouvées classées en juillet, ce
+      // qui vidait le taux de réponse des deux campagnes (constaté le 29/07/2026).
+      // On retient donc l'envoi RÉELLEMENT parti le plus récent — c'est lui qui a
+      // produit le lien sur lequel le client vient de cliquer. `nullsFirst: false`
+      // renvoie les lignes jamais envoyées en dernier.
       const { data: envoi } = await supabase
         .from("envois_sondage")
-        .select("agence, zone, conseiller_id, campagne, motif")
+        .select("agence, zone, conseiller_id, campagne, motif, date_envoi")
         .eq("req", req_param)
+        .order("date_envoi", { ascending: false, nullsFirst: false })
         .limit(1)
         .maybeSingle();
       if (envoi) {

@@ -405,6 +405,10 @@ const RE_EMAIL=/^[^@\s;,\/]+@[^@\s;,\/]+\.[a-z]{2,}$/i;
 // ligne pointillée du graphe, seuils de couleur et verdicts en dépendent tous.
 // (Ne pas confondre avec l'objectif de délai d'indemnisation, en JOURS : voir stDelai.)
 const CIBLE_NPS = 18;
+// Sous ce nombre de réponses NOTÉES, un score NPS n'a pas de sens statistique :
+// une seule réponse le fait basculer de −100 à +100. On affiche quand même la
+// valeur — la masquer serait pire — mais accompagnée d'un avertissement.
+const MIN_FIABLE = 10;
 
 // ---- utils ----
 const $=s=>document.querySelector(s);
@@ -579,7 +583,10 @@ function renderHero(){
     <div>${deltaTag(s, prevCamp?rp.score_nps:null, {unit:" pts"})}</div>`;
   const pos=s==null?50:Math.max(0,Math.min(100,(s+100)/2));
   $("#h-mark").style.left=pos+"%";
-  $("#h-foot").innerHTML=`Sur <b>${r.reponses||0} réponses</b> : <b style="color:var(--good)">${r.promoteurs||0} promoteurs</b>, ${r.passifs||0} passifs, <b style="color:var(--bad)">${r.detracteurs||0} détracteurs</b>.`;
+  const nRep=r.nps_rep||0;
+  $("#h-foot").innerHTML=`Sur <b>${r.reponses||0} réponses</b> : <b style="color:var(--good)">${r.promoteurs||0} promoteurs</b>, ${r.passifs||0} passifs, <b style="color:var(--bad)">${r.detracteurs||0} détracteurs</b>.`
+    + (nRep>0 && nRep<MIN_FIABLE ? ` <b style="color:var(--warn)">Échantillon faible (${nRep} note${nRep>1?"s":""} NPS)</b> : chaque réponse déplace fortement le score.` : "")
+    + (nRep===0 ? ` <b style="color:var(--muted)">Aucune note NPS pour l'instant.</b>` : "");
   // composition
   const tot=(r.promoteurs||0)+(r.passifs||0)+(r.detracteurs||0)||1;
   const seg=(n,col,lbl,plage)=> n?`<div style="flex:${n}; background:${col}" data-tip="<b>${lbl}</b> — ${plage}<br>${n} réponses · ${Math.round(100*n/tot)}%">${Math.round(100*n/tot)}%</div>`:"";
@@ -642,16 +649,25 @@ function renderBD(){
   else if(granLevel==="zone"){ hdr="Zone"; const z=D.zones.filter(x=>x.campagne===camp&&x.zone); sub=`${z.length} zone(s)`;
     rows=z.map(x=>norm2({name:x.zone,n:x.reponses,score:x.score_nps,csat:x.csat_global,csatSin:x.csat_sinistre,delai:x.delai_reel,taux:x.taux_reponse})); }
   else if(granLevel==="agence"){ hdr="Agence"; const a=D.agences.filter(x=>x.campagne===camp); sub=`${a.length} agence(s) · triées par score`;
-    rows=a.map(x=>norm2({name:x.agence,n:x.reponses,score:x.nps_score,csat:x.csat_global,csatSin:x.csat_sinistre,delai:x.delai_reel,taux:D.tauxKey[camp+"|"+x.agence]})); }
+    // `score_nps` est l'alias aligné sur les autres vues ; `nps_score` reste lu en
+    // repli si la migration d'alignement n'est pas encore appliquée.
+    rows=a.map(x=>norm2({name:x.agence,n:x.reponses,score:x.score_nps??x.nps_score,csat:x.csat_global,csatSin:x.csat_sinistre,delai:x.delai_reel,taux:D.tauxKey[camp+"|"+x.agence]})); }
   else { hdr="Conseiller"; const c=D.conseillers.filter(x=>x.campagne===camp); sub=`${c.length} conseiller(s)`;
     rows=c.map(x=>norm2({name:x.conseiller_nom||x.conseiller_id,sub:x.agence,n:x.reponses,score:x.score_nps,csat:x.csat_global,csatSin:x.csat_sinistre,delai:x.delai_reel,taux:x.taux_reponse})); }
   rows.sort((a,b)=>(b.score??-999)-(a.score??-999));
   $("#gran-sub").textContent=`Campagne ${camp} · ${sub}`;
-  const head=`<thead><tr><th>${hdr}</th><th>Réponses</th><th>Score NPS</th><th>Satisfaction</th><th>Sat. sinistre</th><th>Délai réel</th><th>Taux rép.</th></tr></thead>`;
+  // « Réponses » compte les réponses rattachées à l'agence DÉCLARÉE par le client ;
+  // « Taux rép. » rapporte les réponses aux invitations de l'agence du FICHIER, des
+  // deux côtés du ratio. Les deux nombres peuvent donc différer pour une agence :
+  // c'est voulu, un pourcentage doit comparer la même population.
+  const head=`<thead><tr><th>${hdr}</th><th>Réponses</th>`
+    + `<th data-tip="Score NPS = % promoteurs − % détracteurs.<br>« * » signale un échantillon de moins de ${MIN_FIABLE} réponses.">Score NPS</th>`
+    + `<th>Satisfaction</th><th>Sat. sinistre</th><th>Délai réel</th>`
+    + `<th data-tip="Réponses rapportées aux invitations envoyées, sur l'agence d'origine de l'envoi.">Taux rép.</th></tr></thead>`;
   const body=rows.length? rows.map(x=>{
     const nm=x.sub?`${esc(x.name)} <span class="agc">${esc(x.sub)}</span>`:esc(x.name);
     return `<tr><td>${nm}</td><td class="num">${x.n??0}</td>
-      <td><span class="cchip" style="background:color-mix(in srgb,${scoreColor(x.score)} 16%,transparent);color:${scoreColor(x.score)}">${x.score==null?"—":(x.score>0?"+":"")+x.score}</span></td>
+      <td><span class="cchip" style="background:color-mix(in srgb,${scoreColor(x.score)} 16%,transparent);color:${scoreColor(x.score)}"${(x.n??0)<MIN_FIABLE?` data-tip="Échantillon faible : ${x.n??0} réponse(s). Score à lire avec prudence."`:""}>${x.score==null?"—":(x.score>0?"+":"")+x.score}${(x.n??0)>0&&(x.n??0)<MIN_FIABLE?" *":""}</span></td>
       <td class="num" style="color:${csatColor(x.csat)}">${fmt(x.csat,1)}</td>
       <td class="num" style="color:${csatColor(x.csatSin)}">${fmt(x.csatSin,1)}</td>
       <td class="num" style="color:${delaiColor(x.delai)}">${x.delai==null?"—":Math.round(x.delai)+" j"}</td>
@@ -692,7 +708,7 @@ function renderTrend(){
 }
 
 function renderAgences(){
-  const ag=D.agences.filter(x=>x.campagne===camp).map(x=>({a:x.agence,v:x.nps_score,n:x.reponses}))
+  const ag=D.agences.filter(x=>x.campagne===camp).map(x=>({a:x.agence,v:x.score_nps??x.nps_score,n:x.reponses}))
     .filter(x=>x.v!=null).sort((a,b)=>b.v-a.v);
   $("#bars-sub").textContent=`Campagne ${camp} · score NPS`;
   if(!ag.length){ $("#bars").innerHTML='<div class="empty">Aucune donnée agence.</div>'; return; }

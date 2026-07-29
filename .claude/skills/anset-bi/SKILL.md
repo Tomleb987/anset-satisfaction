@@ -23,7 +23,8 @@ brute pour un KPI qui existe déjà en vue.
 | `v_satisfaction_reseau` | par campagne | KPIs réseau, tendance NPS |
 | `v_satisfaction_zone` | campagne × zone | heatmap / comparaison zones |
 | `v_satisfaction_conseiller` | campagne × conseiller | classement conseillers |
-| `v_taux_reponse` | campagne × agence | suivi diffusion vs réponses |
+| `v_taux_reponse` | campagne × agence (de l'envoi) | suivi diffusion vs réponses |
+| `v_envoi_reference` | 1 ligne/`req` | envoi de référence (le plus récent réellement parti) |
 | `v_satisfaction_motif` | campagne × motif | bloc « par motif » + carte Sinistres |
 | `v_reseaux_sociaux` | par campagne | tuile KPI « Réseaux sociaux » (taux_suivi / taux_interet) |
 | `v_verbatims` | 1 ligne/commentaire | verbatims (flag `detracteur`, expose `motif`) |
@@ -45,6 +46,21 @@ Toutes en `security_invoker = on` → soumises à la RLS `authenticated` (voir s
 - **CSAT** : moyennes de `satisfaction_globale`, `note_conseiller`, `note_accueil`
   (échelles laissées telles quelles, arrondi 2 décimales).
 - **Taux de réponse** = `100*reponses/envoyes` (envois `statut_envoi='envoye'`).
+  **Attribution (corrigé le 29/07/2026)** : le ratio se calcule sur l'agence/zone de
+  l'**ENVOI** des deux côtés — le dénominateur vient du fichier, le numérateur doit donc en venir
+  aussi, sinon une agence absente de la liste du formulaire (Site WEB, Polynésie Assurances,
+  Commerciaux) reste figée à 0 % et une autre peut dépasser 100 %. La **satisfaction** par agence,
+  elle, s'agrège sur l'agence **effective** = `coalesce(déclarée par le client, celle de l'envoi)`.
+  Les deux nombres d'une même ligne peuvent donc différer : c'est voulu.
+- **Rattachement d'une réponse à sa campagne** : via `v_envoi_reference` (`distinct on (req)`,
+  envoi réellement parti le plus récent). Un même `req` peut exister dans plusieurs campagnes ;
+  sans ce tri, les réponses se classaient dans une campagne qui n'avait rien envoyé. Même règle
+  dans `submit-sondage` — les deux doivent rester alignées.
+- **Échantillon minimal** : `MIN_FIABLE = 10` notes NPS. En dessous, le score reste affiché mais
+  accompagné d'un avertissement (hero) et d'un « * » (tableau) — une réponse fait basculer un NPS
+  de −100 à +100.
+- `v_satisfaction_reseau` part de l'**union** réponses ∪ envois : une campagne diffusée sans
+  réponse doit apparaître (taux 0 %), sinon elle est absente jusqu'au sélecteur de campagne.
 - **Taux de consentement** = `100*consentements/reponses`.
 - **Satisfaction globale en %** = `(csat_global − 1) / 4 × 100` (helper `csatPct`) : 1/5 → 0 %,
   5/5 → 100 %. Surtout **pas** `moyenne/5*100`, qui plancherait à 20 %. Le statut et la couleur
