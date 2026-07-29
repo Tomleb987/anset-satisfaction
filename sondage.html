@@ -459,12 +459,17 @@ let current = allSteps[0];
 //  - data-cond="interaction"   → visible seulement si interaction = oui
 //  - data-role="interaction"   → masquée si le motif est déjà connu (lien typé)
 //  - data-role="motif"         → masquée si le motif est déjà connu (lien typé)
-//  - data-motif="sinistre"     → visible seulement si le motif choisi est "sinistre"
+//  - data-motif="sinistre"     → visible seulement si le motif vient du LIEN typé
+//    (campagne « sinistres clos »), pas si le client l'a déclaré lui-même : la
+//    satisfaction sinistre ne concerne que les clients réellement indemnisés et
+//    leur gestionnaire sinistre. Un répondant d'une campagne quittance qui coche
+//    « sinistre » n'est donc plus interrogé sur une gestion que personne
+//    n'exploiterait — la note serait imputée au gestionnaire de sa quittance.
 const stepVisibleIn = (s, a) => {
   if (s.dataset.role === "interaction" && motifFromUrl) return false;
   if (s.dataset.cond && a[s.dataset.cond] !== true) return false;
   if (s.dataset.role === "motif" && motifFromUrl) return false;
-  if (s.dataset.motif && a.motif !== s.dataset.motif) return false;
+  if (s.dataset.motif && motifFromUrl !== s.dataset.motif) return false;
   return true;
 };
 const visibleSteps = () => allSteps.filter(s => stepVisibleIn(s, answers));
@@ -540,8 +545,10 @@ async function submit() {
     interaction: answers.interaction,
     agence: answers.agence,
     motif: answers.motif || null,
-    sat_sinistre:        answers.motif === "sinistre" ? answers.sat_sinistre : null,
-    delai_indemnisation: answers.motif === "sinistre" ? answers.delai_indemnisation : null,
+    // Mesures sinistre : seulement sur une campagne typée sinistre (motif du lien).
+    // `submit-sondage` applique de toute façon le même filtre côté serveur.
+    sat_sinistre:        motifFromUrl === "sinistre" ? answers.sat_sinistre : null,
+    delai_indemnisation: motifFromUrl === "sinistre" ? answers.delai_indemnisation : null,
     nps: answers.nps,
     csat_global: answers.csat_global,
     csat_accueil:    answers.interaction === true ? answers.csat_accueil : null,

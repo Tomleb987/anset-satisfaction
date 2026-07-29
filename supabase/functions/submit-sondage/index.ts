@@ -126,6 +126,10 @@ Deno.serve(async (req: Request) => {
     // source canonique (agence/zone/conseiller/campagne). La zone suit l'agence CHOISIE.
     let conseiller_id: string | null = trimOrNull(body.conseiller_id);
     let zone: string | null = null;
+    // Motif porté par la CAMPAGNE (et non déclaré par le client) : seul garant que
+    // le répondant a réellement été indemnisé, donc que son conseiller est bien un
+    // gestionnaire sinistre. Conditionne l'écriture des deux mesures sinistre.
+    let motifEnvoi: string | null = null;
 
     if (req_param) {
       // Un même `req` peut exister dans PLUSIEURS campagnes (le même fichier source
@@ -147,8 +151,8 @@ Deno.serve(async (req: Request) => {
         if (envoi.campagne) campagne = envoi.campagne; // caler sur la campagne d'origine
         zone = envoi.zone ?? null;
         // La campagne typée (ex. sinistres clos) fait foi sur le motif.
-        const envoiMotif = motifOrNull(envoi.motif);
-        if (envoiMotif) motif = envoiMotif;
+        motifEnvoi = motifOrNull(envoi.motif);
+        if (motifEnvoi) motif = motifEnvoi;
       }
     }
     // La zone suit l'agence renseignée (source de vérité = table agences).
@@ -177,9 +181,13 @@ Deno.serve(async (req: Request) => {
           satisfaction_globale: toInt(body.csat_global),
           note_conseiller: toInt(body.csat_conseiller),
           note_accueil: toInt(body.csat_accueil),
-          // Champs spécifiques sinistre : conservés uniquement quand le motif est "sinistre".
-          sat_sinistre:        motif === "sinistre" ? toInt(body.sat_sinistre) : null,
-          delai_indemnisation: motif === "sinistre" ? toInt(body.delai_indemnisation) : null,
+          // Mesures sinistre : conservées uniquement pour une campagne SINISTRE, pas
+          // sur un motif déclaré par le client. Un répondant d'une campagne quittance
+          // qui coche « sinistre » créditait sinon d'une note de gestion de sinistre
+          // le gestionnaire de sa quittance (cas `titaina.pea`, 29/07/2026). Même
+          // règle dans les vues de pilotage : voir 20260729160000.
+          sat_sinistre:        motifEnvoi === "sinistre" ? toInt(body.sat_sinistre) : null,
+          delai_indemnisation: motifEnvoi === "sinistre" ? toInt(body.delai_indemnisation) : null,
           reseaux_sociaux: reseauxOrNull(body.reseaux_sociaux),
           commentaire: trimOrNull(body.commentaire),
           a_consenti_recontact: consent,

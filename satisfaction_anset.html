@@ -298,6 +298,7 @@
     <div class="toolbar">
       <select id="p-statut"></select>
       <select id="p-agence"><option value="">Toutes les agences</option></select>
+      <select id="p-pec"><option value="">Tous les conseillers</option></select>
       <input type="text" id="p-search" placeholder="Rechercher nom / email…" />
       <div class="sp"></div>
       <button class="ghost" id="p-refresh">Actualiser</button>
@@ -539,13 +540,16 @@ $("#tabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(
 const D={}; let camp=null, prevCamp=null, granLevel="global";
 async function loadDashboard(){
   const q=(t,order)=>{ let r=sb.from(t).select("*"); if(order) r=r.order(order.col,{ascending:order.asc}); return r.then(x=>x.data||[]); };
-  const [reseau,zones,agences,conseillers,taux,verbatims,motifs,rs,sinistres]=await Promise.all([
+  // `v_sinistres_reseau` porte désormais TOUT le volet sinistre (volume, délai réel,
+  // NPS et notes des seuls clients indemnisés). `v_satisfaction_motif` n'est plus lue :
+  // son NPS reposait sur le motif DÉCLARÉ, une autre population que ses notes sinistre.
+  const [reseau,zones,agences,conseillers,taux,verbatims,rs,sinistres]=await Promise.all([
     q("v_satisfaction_reseau"), q("v_satisfaction_zone"), q("v_satisfaction_agence"), q("v_satisfaction_conseiller"),
     q("v_taux_reponse"), sb.from("v_verbatims").select("*").order("date_reponse",{ascending:false}).limit(300).then(x=>x.data||[]),
-    q("v_satisfaction_motif"), q("v_reseaux_sociaux"), q("v_sinistres_reseau"),
+    q("v_reseaux_sociaux"), q("v_sinistres_reseau"),
   ]);
   D.reseau=reseau; D.zones=zones; D.agences=agences; D.conseillers=conseillers; D.taux=taux;
-  D.verbatims=verbatims; D.motifs=motifs; D.rs=rs; D.sinistres=sinistres;
+  D.verbatims=verbatims; D.rs=rs; D.sinistres=sinistres;
   D.tauxKey={}; taux.forEach(t=>D.tauxKey[t.campagne+"|"+t.agence]=t.taux_reponse);
   D.campagnes=[...new Set(reseau.map(r=>r.campagne).filter(Boolean))].sort();
   const has=D.campagnes.length>0;
@@ -563,8 +567,9 @@ $("#granseg").addEventListener("click",e=>{ const b=e.target.closest("button"); 
 
 const serie=f=>D.campagnes.map(c=>{ const r=D.reseau.find(x=>x.campagne===c); return r?r[f]:null; });
 const rowFor=c=>D.reseau.find(x=>x.campagne===c)||{};
-const sinRowFor=c=>D.motifs.find(x=>x.campagne===c && x.motif==="sinistre");
-const sinDelaiFor=c=>D.sinistres.find(x=>x.campagne===c);
+// Une seule source pour le sinistre : les clients invités depuis la liste des
+// sinistres clos (donc réellement indemnisés, par un gestionnaire sinistre).
+const sinRowFor=c=>D.sinistres.find(x=>x.campagne===c);
 
 function renderAll(){
   camp=$("#f-campagne").value; const idx=D.campagnes.indexOf(camp);
@@ -620,44 +625,58 @@ function renderKPIs(){
   $("#kpis").innerHTML=K.map(tile).join("");
 }
 
+// Toutes les tuiles portent sur la MÊME population : les clients invités depuis la
+// liste des sinistres clos. Le nombre de réponses est rappelé sous chaque note —
+// une moyenne /5 sur une réponse n'est pas un indicateur de performance.
 function renderSinistre(){
-  const sr=sinRowFor(camp), srp=sinRowFor(prevCamp), sd=sinDelaiFor(camp)||{}, sdp=sinDelaiFor(prevCamp)||{};
-  if(!sr && !(sd&&sd.n_clos)){ $("#sin-kpis").innerHTML=`<div class="empty" style="grid-column:1/-1">Pas encore de réponses « sinistre » pour cette campagne. Importez la liste des sinistres clos dans l'onglet Administration.</div>`; $("#sin-insight").innerHTML=""; return; }
+  const s=sinRowFor(camp)||{}, sp=sinRowFor(prevCamp)||{};
+  if(!s.n_clos && !s.reponses){ $("#sin-kpis").innerHTML=`<div class="empty" style="grid-column:1/-1">Pas encore de réponses « sinistre » pour cette campagne. Importez la liste des sinistres clos dans l'onglet Administration.</div>`; $("#sin-insight").innerHTML=""; return; }
+  const nr=s.reponses||0, base=`${nr} réponse${nr>1?"s":""} d'indemnisés`;
   const K=[];
-  let [st,pill]=stScore(sr?.score_nps);
-  K.push({lbl:"Recommandation sinistre",sig:"NPS · indemnisés",n:sr?.score_nps==null?"—":(sr.score_nps>0?"+":"")+sr.score_nps,u:"",st,pill:pill,ctx:`réseau : ${(rowFor(camp).score_nps??"—")}`,delta:deltaTag(sr?.score_nps,prevCamp?srp?.score_nps:null,{unit:" pts"})});
-  [st,pill]=stCsat(sr?.csat_sinistre);
-  K.push({lbl:"Gestion du sinistre",sig:"satisfaction /5",n:fmt(sr?.csat_sinistre,1),u:"/5",st,pill,ctx:"prise en charge, suivi",delta:deltaTag(sr?.csat_sinistre,prevCamp?srp?.csat_sinistre:null)});
-  [st,pill]=stCsat(sr?.delai_indemnisation);
-  K.push({lbl:"Délai d'indemnisation ressenti",sig:"note du client /5",n:fmt(sr?.delai_indemnisation,1),u:"/5",st,pill,ctx:"perception de la rapidité",delta:deltaTag(sr?.delai_indemnisation,prevCamp?srp?.delai_indemnisation:null)});
-  [st,pill]=stDelai(sd.delai_reel);
-  K.push({lbl:"Délai réel moyen",sig:"clôture − ouverture",n:sd.delai_reel==null?"—":Math.round(sd.delai_reel),u:"j",st,pill,ctx:"objectif < 30 jours",delta:deltaTag(sd.delai_reel,prevCamp?sdp.delai_reel:null,{unit:" j",invert:true})});
-  K.push({lbl:"Sinistres interrogés",sig:"volume",n:sd.n_clos??(sr?.reponses||0),u:"",st:"brand",pill:"Sinistres clos",ctx:`${sr?.reponses||0} réponses`,delta:""});
+  let [st,pill]=stScore(s.score_nps);
+  K.push({lbl:"Recommandation sinistre",sig:"NPS · indemnisés",n:s.score_nps==null?"—":(s.score_nps>0?"+":"")+s.score_nps,u:"",st,pill,ctx:`réseau : ${(rowFor(camp).score_nps??"—")} · ${s.nps_rep||0} note${(s.nps_rep||0)>1?"s":""}${(s.nps_rep||0)>0&&(s.nps_rep||0)<MIN_FIABLE?" (échantillon faible)":""}`,delta:deltaTag(s.score_nps,prevCamp?sp.score_nps:null,{unit:" pts"})});
+  [st,pill]=stCsat(s.csat_sinistre);
+  K.push({lbl:"Gestion du sinistre",sig:"satisfaction /5",n:fmt(s.csat_sinistre,1),u:"/5",st,pill,ctx:`prise en charge, suivi · ${base}`,delta:deltaTag(s.csat_sinistre,prevCamp?sp.csat_sinistre:null)});
+  [st,pill]=stCsat(s.delai_indemnisation);
+  K.push({lbl:"Délai d'indemnisation ressenti",sig:"note du client /5",n:fmt(s.delai_indemnisation,1),u:"/5",st,pill,ctx:`perception de la rapidité · ${base}`,delta:deltaTag(s.delai_indemnisation,prevCamp?sp.delai_indemnisation:null)});
+  // Délai de traitement : la MÉDIANE est l'indicateur de pilotage, pas la moyenne.
+  // Sur 2026-06 : moyenne 329 j, médiane 102 j, p90 766 j — la moyenne est tirée par
+  // les dossiers ouverts en 2016-2019 et clos en juin 2026. Elle reste affichée mais
+  // en neutre : elle ne décrit aucun client réel, et la colorer donnerait un rouge
+  // qui ne se pilote pas. La médiane, elle, est colorée par stDelai et sortira rouge
+  // aussi (102 j pour un objectif de 30) — c'est voulu : le délai est réellement
+  // trop long, la moyenne exagérait le problème sans l'inventer.
+  [st,pill]=stDelai(s.delai_median);
+  K.push({lbl:"Délai réel médian",sig:"clôture − ouverture",n:s.delai_median==null?"—":Math.round(s.delai_median),u:"j",st,pill,ctx:`objectif < 30 j${s.delai_p90!=null?` · <span data-tip="9 sinistres clos sur 10 l'ont été en moins de ${Math.round(s.delai_p90)} jours.">9 sur 10 &lt; ${Math.round(s.delai_p90)} j</span>`:""}`,delta:deltaTag(s.delai_median,prevCamp?sp.delai_median:null,{unit:" j",invert:true})});
+  K.push({lbl:"Délai réel moyen",sig:"clôture − ouverture",n:s.delai_reel==null?"—":Math.round(s.delai_reel),u:"j",st:"flat",pill:"Moyenne",ctx:`<span data-tip="Moyenne sur tous les sinistres clos, dossiers anciens inclus. À lire avec la médiane : un contentieux de dix ans pèse autant que cent dossiers réglés en une semaine.">tirée par les dossiers anciens</span>`,delta:deltaTag(s.delai_reel,prevCamp?sp.delai_reel:null,{unit:" j",invert:true})});
+  K.push({lbl:"Sinistres interrogés",sig:"volume",n:s.n_clos||nr,u:"",st:"brand",pill:"Sinistres clos",ctx:base,delta:""});
   $("#sin-kpis").innerHTML=K.map(tile).join("");
-  const dr=sd.delai_reel, dp=sr?.delai_indemnisation;
+  // Le « perçu vs réel » se compare à la médiane : c'est le délai qu'a vécu le
+  // client typique, donc le seul comparable à une note de ressenti.
+  const dr=s.delai_median, dp=s.delai_indemnisation;
   $("#sin-insight").innerHTML= (dr!=null||dp!=null)
-    ? `<b>Perçu vs réel</b> — délai ressenti <b>${fmt(dp,1)}/5</b>${dr!=null?` pour un traitement réel moyen de <b>${Math.round(dr)} j</b> (objectif 30)`:""}. Le NPS sinistre (${sr?.score_nps==null?"—":(sr.score_nps>0?"+":"")+sr.score_nps}) est à comparer au réseau (${rowFor(camp).score_nps??"—"}) : l'indemnisation est un levier clé.`
+    ? `<b>Perçu vs réel</b> — délai ressenti <b>${fmt(dp,1)}/5</b>${dr!=null?` pour un traitement réel de <b>${Math.round(dr)} j</b> pour la moitié des dossiers (objectif 30)`:""}. Le NPS sinistre (${s.score_nps==null?"—":(s.score_nps>0?"+":"")+s.score_nps}) est à comparer au réseau (${rowFor(camp).score_nps??"—"}) : l'indemnisation est un levier clé.`
     : "";
 }
 
 function renderBD(){
-  const r=rowFor(camp), sr=sinRowFor(camp), sd=sinDelaiFor(camp)||{};
+  const r=rowFor(camp), s=sinRowFor(camp)||{};
   let rows=[], hdr="Réseau", sub="";
-  const norm2=x=>({name:x.name,sub:x.sub,n:x.n,score:x.score,csat:x.csat,csatSin:x.csatSin,delai:x.delai,taux:x.taux});
+  const norm2=x=>({name:x.name,sub:x.sub,n:x.n,score:x.score,csat:x.csat,csatSin:x.csatSin,nSin:x.nSin,delai:x.delai,taux:x.taux});
   if(granLevel==="global"){ hdr="Réseau"; sub="Vue d'ensemble du réseau";
-    rows=[norm2({name:"Réseau ANSET",n:r.reponses,score:r.score_nps,csat:r.csat_global,csatSin:sr?.csat_sinistre,delai:sd.delai_reel,taux:r.taux_reponse})]; }
+    rows=[norm2({name:"Réseau ANSET",n:r.reponses,score:r.score_nps,csat:r.csat_global,csatSin:s.csat_sinistre,nSin:s.reponses,delai:s.delai_reel,taux:r.taux_reponse})]; }
   else if(granLevel==="zone"){ hdr="Zone"; const z=D.zones.filter(x=>x.campagne===camp&&x.zone); sub=`${z.length} zone(s)`;
-    rows=z.map(x=>norm2({name:x.zone,n:x.reponses,score:x.score_nps,csat:x.csat_global,csatSin:x.csat_sinistre,delai:x.delai_reel,taux:x.taux_reponse})); }
+    rows=z.map(x=>norm2({name:x.zone,n:x.reponses,score:x.score_nps,csat:x.csat_global,csatSin:x.csat_sinistre,nSin:x.n_sinistre,delai:x.delai_reel,taux:x.taux_reponse})); }
   else if(granLevel==="agence"){ hdr="Agence"; const a=D.agences.filter(x=>x.campagne===camp); sub=`${a.length} agence(s) · triées par score`;
     // `score_nps` est l'alias aligné sur les autres vues ; `nps_score` reste lu en
     // repli si la migration d'alignement n'est pas encore appliquée.
-    rows=a.map(x=>norm2({name:x.agence,n:x.reponses,score:x.score_nps??x.nps_score,csat:x.csat_global,csatSin:x.csat_sinistre,delai:x.delai_reel,taux:D.tauxKey[camp+"|"+x.agence]})); }
+    rows=a.map(x=>norm2({name:x.agence,n:x.reponses,score:x.score_nps??x.nps_score,csat:x.csat_global,csatSin:x.csat_sinistre,nSin:x.n_sinistre,delai:x.delai_reel,taux:D.tauxKey[camp+"|"+x.agence]})); }
   else { hdr="Conseiller"; const c=D.conseillers.filter(x=>x.campagne===camp); sub=`${c.length} conseiller(s)`;
     // Pas d'agence en sous-titre : `conseillers.agence` est déduite de l'import et
     // ne vaut que pour la première ligne rencontrée, alors qu'un conseiller peut
     // travailler pour plusieurs agences (ou pour l'équipe Commerciaux). L'afficher
     // laissait croire à un rattachement fiable.
-    rows=c.map(x=>norm2({name:x.conseiller_nom||x.conseiller_id,n:x.reponses,score:x.score_nps,csat:x.csat_global,csatSin:x.csat_sinistre,delai:x.delai_reel,taux:x.taux_reponse})); }
+    rows=c.map(x=>norm2({name:x.conseiller_nom||x.conseiller_id,n:x.reponses,score:x.score_nps,csat:x.csat_global,csatSin:x.csat_sinistre,nSin:x.n_sinistre,delai:x.delai_reel,taux:x.taux_reponse})); }
   rows.sort((a,b)=>(b.score??-999)-(a.score??-999));
   $("#gran-sub").textContent=`Campagne ${camp} · ${sub}`;
   // « Réponses » compte les réponses rattachées à l'agence DÉCLARÉE par le client ;
@@ -666,14 +685,16 @@ function renderBD(){
   // c'est voulu, un pourcentage doit comparer la même population.
   const head=`<thead><tr><th>${hdr}</th><th>Réponses</th>`
     + `<th data-tip="Score NPS = % promoteurs − % détracteurs.<br>« * » signale un échantillon de moins de ${MIN_FIABLE} réponses.">Score NPS</th>`
-    + `<th>Satisfaction</th><th>Sat. sinistre</th><th>Délai réel</th>`
+    + `<th>Satisfaction</th>`
+    + `<th data-tip="Gestion du sinistre notée /5 par les clients réellement indemnisés (invités depuis la liste des sinistres clos).<br>« — » = ce périmètre n'a traité aucun sinistre : un gestionnaire de quittances n'a pas de note sinistre.">Sat. sinistre</th>`
+    + `<th data-tip="Délai MOYEN entre ouverture et clôture des sinistres du périmètre. Sensible aux dossiers anciens : voir la médiane dans la carte « Gestion des sinistres » pour le délai du dossier typique.">Délai réel</th>`
     + `<th data-tip="Réponses rapportées aux invitations envoyées, sur l'agence d'origine de l'envoi.">Taux rép.</th></tr></thead>`;
   const body=rows.length? rows.map(x=>{
     const nm=x.sub?`${esc(x.name)} <span class="agc">${esc(x.sub)}</span>`:esc(x.name);
     return `<tr><td>${nm}</td><td class="num">${x.n??0}</td>
       <td><span class="cchip" style="background:color-mix(in srgb,${scoreColor(x.score)} 16%,transparent);color:${scoreColor(x.score)}"${(x.n??0)<MIN_FIABLE?` data-tip="Échantillon faible : ${x.n??0} réponse(s). Score à lire avec prudence."`:""}>${x.score==null?"—":(x.score>0?"+":"")+x.score}${(x.n??0)>0&&(x.n??0)<MIN_FIABLE?" *":""}</span></td>
       <td class="num" style="color:${csatColor(x.csat)}">${fmt(x.csat,1)}</td>
-      <td class="num" style="color:${csatColor(x.csatSin)}">${fmt(x.csatSin,1)}</td>
+      <td class="num" style="color:${csatColor(x.csatSin)}"${x.csatSin!=null?` data-tip="Sur ${x.nSin??0} réponse(s) de clients indemnisés."`:""}>${fmt(x.csatSin,1)}</td>
       <td class="num" style="color:${delaiColor(x.delai)}">${x.delai==null?"—":Math.round(x.delai)+" j"}</td>
       <td class="num" style="color:${tauxColor(x.taux)}">${x.taux==null?"—":Math.round(x.taux)+" %"}</td></tr>`;
   }).join("") : `<tr><td colspan="7" class="empty">Aucune donnée.</td></tr>`;
@@ -735,37 +756,77 @@ function renderVerbatims(){
 }
 
 // ============================ PROSPECTION ============================
-let leads=[];
+let leads=[], conseillersList=[];
 $("#p-statut").innerHTML='<option value="">Tous les statuts</option>'+STATUTS.map(s=>`<option value="${s}">${STATUT_LABELS[s]}</option>`).join("");
-["#p-statut","#p-agence","#p-search"].forEach(s=>$(s).addEventListener("input",renderLeads));
+["#p-statut","#p-agence","#p-pec","#p-search"].forEach(s=>$(s).addEventListener("input",renderLeads));
 $("#p-refresh").addEventListener("click",loadLeads);
 function pNotice(m,k="ok"){ $("#p-notice").innerHTML=`<div class="notice ${k}">${esc(m)}</div>`; setTimeout(()=>$("#p-notice").innerHTML="",4000); }
+// Libellé d'un conseiller : `conseillers.nom` peut être vide (créé à l'import à
+// partir du seul slug) — on retombe alors sur le slug remis en forme.
+const consLabel=id=>{ if(!id) return "—"; const c=conseillersList.find(x=>x.id===id); return (c&&c.nom)||nomFromSlug(id); };
 async function loadLeads(){
-  const {data,error}=await sb.from("leads").select("id,response_id,nom,prenom,email,telephone,agence,campagne,conseiller_id,statut,created_at").order("created_at",{ascending:false});
-  if(error){ pNotice("Chargement échoué : "+error.message,"err"); return; }
-  leads=data||[]; const ags=[...new Set(leads.map(l=>l.agence).filter(Boolean))].sort();
+  const [lead,cons]=await Promise.all([
+    sb.from("leads").select("id,response_id,nom,prenom,email,telephone,agence,campagne,conseiller_id,traite_par,date_prise_en_charge,statut,created_at").order("created_at",{ascending:false}),
+    sb.from("conseillers").select("id,nom").order("nom",{ascending:true}),
+  ]);
+  if(lead.error){ pNotice("Chargement échoué : "+lead.error.message,"err"); return; }
+  leads=lead.data||[];
+  conseillersList=(cons.data||[]).sort((a,b)=>(a.nom||a.id).localeCompare(b.nom||b.id,"fr"));
+  const ags=[...new Set(leads.map(l=>l.agence).filter(Boolean))].sort();
   $("#p-agence").innerHTML='<option value="">Toutes les agences</option>'+ags.map(a=>`<option>${esc(a)}</option>`).join("");
+  // Le filtre garde la valeur choisie au rechargement (« Actualiser » ne doit pas
+  // ramener l'utilisateur sur toute la liste alors qu'il traitait son portefeuille).
+  const pec=$("#p-pec").value;
+  $("#p-pec").innerHTML='<option value="">Tous les conseillers</option><option value="__none">Non attribués</option>'
+    +conseillersList.map(c=>`<option value="${esc(c.id)}">${esc(c.nom||nomFromSlug(c.id))}</option>`).join("");
+  $("#p-pec").value=pec;
   renderLeads();
 }
 function renderLeads(){
-  const st=$("#p-statut").value, ag=$("#p-agence").value, qq=norm($("#p-search").value);
-  const rows=leads.filter(l=>(!st||l.statut===st)&&(!ag||l.agence===ag)&&(!qq||norm([l.nom,l.prenom,l.email].filter(Boolean).join(" ")).includes(qq)));
+  const st=$("#p-statut").value, ag=$("#p-agence").value, pec=$("#p-pec").value, qq=norm($("#p-search").value);
+  const okPec=l=> !pec || (pec==="__none" ? !l.traite_par : l.traite_par===pec);
+  const rows=leads.filter(l=>(!st||l.statut===st)&&(!ag||l.agence===ag)&&okPec(l)&&(!qq||norm([l.nom,l.prenom,l.email].filter(Boolean).join(" ")).includes(qq)));
   const by={}; leads.forEach(l=>by[l.statut]=(by[l.statut]||0)+1);
   const kt=(l,n,c)=>`<div class="card kpi"><div class="lbl">${l}</div><div class="v"><span class="n num" style="color:var(${c})">${n}</span></div></div>`;
+  // « Non attribués » compte les leads que personne n'a pris en charge : c'est la
+  // file d'attente réelle de la prospection, indépendamment du statut.
+  const orphelins=leads.filter(l=>!l.traite_par).length;
   $("#p-kpis").innerHTML=kt("Leads (total)",leads.length,"--blue")+kt("Nouveaux",by.nouveau||0,"--warn")
+    +kt("Non attribués",orphelins,orphelins?"--bad":"--good")
     +kt("En cours",(by.a_contacter||0)+(by.rappel||0)+(by.injoignable||0)+(by.interesse||0)+(by.devis||0),"--muted")
     +kt("Souscrits",by.souscrit||0,"--good");
   $("#p-empty").style.display=rows.length?"none":"block";
-  $("#leads").innerHTML=`<thead><tr><th>Client</th><th>Contact</th><th>Agence</th><th>Campagne</th><th>Conseiller</th><th>Statut</th><th></th></tr></thead><tbody>`+
+  const consOpts=l=>'<option value="">— Non attribué —</option>'
+    +conseillersList.map(c=>`<option value="${esc(c.id)}" ${c.id===l.traite_par?"selected":""}>${esc(c.nom||nomFromSlug(c.id))}</option>`).join("");
+  $("#leads").innerHTML=`<thead><tr><th>Client</th><th>Contact</th><th>Agence</th><th>Campagne</th>`
+    +`<th data-tip="Conseiller qui a servi le client lors du contact sondé — l'origine du lead, pas son suivi.">Conseiller d'origine</th>`
+    +`<th data-tip="Conseiller qui prend le lead en charge. Modifiable ici.">Pris en charge par</th>`
+    +`<th>Statut</th><th></th></tr></thead><tbody>`+
     rows.map(l=>{ const nom=[l.prenom,l.nom].filter(Boolean).join(" ")||"—";
       const contact=[l.telephone,l.email].filter(Boolean).map(esc).join("<br>")||"—";
       const opts=STATUTS.map(s=>`<option value="${s}" ${s===l.statut?"selected":""}>${STATUT_LABELS[s]}</option>`).join("");
-      return `<tr><td>${esc(nom)}</td><td class="mono">${contact}</td><td>${esc(l.agence||"—")}</td><td>${esc(l.campagne||"—")}</td><td>${esc(l.conseiller_id||"—")}</td>
+      const depuis=l.traite_par&&l.date_prise_en_charge?` data-tip="Pris en charge le ${(l.date_prise_en_charge||"").slice(0,10)}"`:"";
+      return `<tr><td>${esc(nom)}</td><td class="mono">${contact}</td><td>${esc(l.agence||"—")}</td><td>${esc(l.campagne||"—")}</td>
+        <td>${esc(consLabel(l.conseiller_id))}</td>
+        <td${depuis}><select class="lead-pec" data-id="${l.id}">${consOpts(l)}</select></td>
         <td><span class="pill-st st-${l.statut}">${STATUT_LABELS[l.statut]||l.statut}</span></td>
         <td><select class="lead-st" data-id="${l.id}">${opts}</select> <button class="btn ghost lead-note" data-id="${l.id}">Note</button></td></tr>`;
     }).join("")+`</tbody>`;
   document.querySelectorAll(".lead-st").forEach(s=>s.addEventListener("change",onStatut));
+  document.querySelectorAll(".lead-pec").forEach(s=>s.addEventListener("change",onPriseEnCharge));
   document.querySelectorAll(".lead-note").forEach(b=>b.addEventListener("click",onNote));
+}
+// Attribution d'un lead. La date n'est posée qu'à la prise en charge et repart à
+// null si on désattribue : elle doit toujours décrire l'état affiché.
+async function onPriseEnCharge(e){
+  const id=e.target.dataset.id, traite_par=e.target.value||null;
+  const date_prise_en_charge=traite_par?new Date().toISOString():null;
+  const {error}=await sb.from("leads").update({traite_par,date_prise_en_charge}).eq("id",id);
+  if(error){ pNotice("Attribution échouée : "+error.message,"err"); return; }
+  const l=leads.find(x=>String(x.id)===String(id));
+  if(l){ l.traite_par=traite_par; l.date_prise_en_charge=date_prise_en_charge; }
+  pNotice(traite_par?`Lead attribué à ${consLabel(traite_par)}.`:"Lead remis en non attribué.");
+  renderLeads();
 }
 async function onStatut(e){ const id=e.target.dataset.id, statut=e.target.value;
   const {error}=await sb.from("leads").update({statut}).eq("id",id);
