@@ -76,8 +76,9 @@ Ces valeurs sont lues par la fonction `envoi-sondage`. **Deux méthodes** au cho
 3. Enregistrer. (La prise en compte est immédiate au prochain appel de la fonction.)
 
 Secrets **optionnels**, uniquement en cas de souci réseau : `BREVO_SMTP_HOST` (défaut
-`smtp-relay.brevo.com`) et `BREVO_SMTP_PORT` (défaut `587` ; mettre `465` si le 587 est filtré —
-le code bascule alors automatiquement en TLS direct).
+`smtp-relay.brevo.com`), `BREVO_SMTP_PORT` (défaut `587` ; mettre `465` si le 587 est filtré — le code
+bascule alors automatiquement en TLS direct) et `BREVO_SMTP_CONCURRENCE` (défaut `4` connexions
+simultanées ; `1` si Brevo se plaint du nombre de connexions).
 
 Les anciens secrets `BREVO_API_KEY` et `BREVO_TEMPLATE_ID` **ne servent plus** : tu peux les
 supprimer (ou laisser, ils sont ignorés).
@@ -113,8 +114,11 @@ Depuis l'app de pilotage : https://anset-satisfaction.vercel.app/satisfaction_an
 
 1. **Aperçu (aucun envoi)** : vérifie que le lot est prêt et affiche un exemple de lien. *(Aucun e-mail parti.)*
 2. **Test (1 e-mail)** : saisir ta propre adresse → tu dois recevoir l'e-mail « Ia Ora Na » avec le bouton « Donner mon avis ». Clique → le formulaire s'ouvre.
-3. **Envoi réel** : lance la diffusion de la campagne. Les e-mails partent **immédiatement**, un par
-   un (le SMTP ne sait pas programmer un envoi ; l'ancien décalage « H+2 » n'existe plus).
+3. **Envoi réel** : lance la diffusion de la campagne. Les e-mails partent **immédiatement** (le SMTP
+   ne sait pas programmer un envoi ; l'ancien décalage « H+2 » n'existe plus). **Un seul clic suffit,
+   même sur un lot de plusieurs centaines** : la fonction envoie en parallèle et, si sa fenêtre
+   d'exécution arrive à son terme, elle se relance toute seule sur le reste du lot. Le message
+   « le reste du lot continue automatiquement » signale ce cas — il n'y a rien à recliquer.
 
 ## Vérifications / dépannage
 
@@ -125,9 +129,12 @@ Depuis l'app de pilotage : https://anset-satisfaction.vercel.app/satisfaction_an
 - **« Sender not valid » / e-mail refusé** : l'adresse de `BREVO_SENDER_EMAIL` n'est pas validée dans
   Brevo (étape 1.2).
 - **Timeout / connexion impossible** : le port 587 est filtré → mettre le secret `BREVO_SMTP_PORT=465`.
-- **Envoi réel partiel** (`envoyes` < lot, `echecs` > 0) : les lignes en échec restent `a_envoyer` — il
-  suffit de relancer « Envoi réel » après correction, aucun doublon (la fonction est idempotente).
-  Attention aussi au quota du plan (≈ 300 e-mails/jour en gratuit) : au-delà, Brevo refuse les envois.
+- **« too many connections »** : Brevo refuse les 4 connexions simultanées → poser le secret
+  `BREVO_SMTP_CONCURRENCE=1` (les envois repassent en série, plus lents mais toujours automatiques).
+- **Envoi réel partiel** (`echecs` > 0) : les lignes en échec restent `a_envoyer` — relancer
+  « Envoi réel » après correction les reprend, sans doublon (la fonction est idempotente). Une ligne
+  qui échoue toujours (adresse morte) n'entretient pas la relance automatique : celle-ci ne se
+  déclenche que si le passage a envoyé au moins un e-mail.
 - **E-mails en spam** : authentifier le domaine (SPF/DKIM, étape 1.3).
 - **Le lien du bouton est vide** : problème côté données (`envois_sondage` sans référence) ou `FORM_URL`
   mal renseigné → le vérifier avec « Aperçu (aucun envoi) », qui affiche un exemple de lien.

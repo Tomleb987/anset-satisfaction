@@ -811,6 +811,7 @@ async function diffuser(mode){
     if(!res.ok || j.ok===false) throw new Error(j.error||"Échec de la diffusion.");
     let msg = j.dry ? `Aperçu : ${j.aTraiter??0} invitation(s) prête(s).`
       : j.test ? `Test envoyé à ${j.to} (envoi immédiat, vérifie aussi les spams).`
+      : j.suiteAutomatique ? `${j.envoyes??0} envoyée(s), ${j.echecs??0} échec(s) — le reste du lot continue automatiquement, rien à relancer.`
       : `Envoi terminé : ${j.envoyes??0} envoyée(s), ${j.echecs??0} échec(s).`;
     $("#d-notice").innerHTML=`<div class="notice ok">✓ ${esc(msg)}</div>`;
     if(j.apercu&&j.apercu.length) $("#d-report").innerHTML=`<div class="sub" style="margin-top:12px">Exemple de lien : <span class="tag-mono">${esc(j.apercu[0].lien||"")}</span></div>`;

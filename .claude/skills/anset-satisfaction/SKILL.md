@@ -32,6 +32,11 @@ Diffusion mensuelle : import `.xlsx` → `envois_sondage` → Edge Function `env
 (**relais SMTP Brevo** via `npm:nodemailer`, lien personnalisé, envoi immédiat). Modes diag :
 `?dry=1`, `?test=x@y.pf`, `?campagne=YYYY-MM`, `?limit=N`.
 
+**Un clic = tout le lot** : envois parallélisés (`BREVO_SMTP_CONCURRENCE`, défaut 4) et, à l'approche
+de la fenêtre d'exécution (150 s en plan Supabase **free**), la fonction se relance elle-même
+(`?chaine=N`, plafond 20, uniquement si le passage a envoyé ≥ 1 e-mail → pas de boucle sur une
+adresse morte). Ne pas remettre de logique « relancer à la main ».
+
 **Pourquoi SMTP et pas l'API Brevo** : l'API refuse les IP inconnues et l'IP de sortie des Edge
 Functions change à chaque invocation (liste blanche impossible) ; les clés SMTP échappent à ce
 filtrage. Conséquences : **pas de template transactionnel Brevo** (le sujet + le HTML vivent dans

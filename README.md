@@ -88,6 +88,7 @@ satisfaction_anset.html                          # app 3 onglets : Satisfaction 
    supabase secrets set FORM_URL=https://…/sondage.html
    supabase secrets set BREVO_SENDER_EMAIL=… BREVO_SENDER_NAME="ANSET"
    # optionnels : BREVO_SMTP_HOST (défaut smtp-relay.brevo.com), BREVO_SMTP_PORT (défaut 587),
+   #              BREVO_SMTP_CONCURRENCE (défaut 4 connexions simultanées),
    #              ALLOWED_ORIGIN=https://votre-hebergement   (CORS de submit-sondage)
    ```
    > L'envoi passe par le **relais SMTP** et non par l'API Brevo : l'API refuse les appels venant
