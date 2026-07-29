@@ -69,12 +69,18 @@
     flex: 1; position: relative; overflow: hidden;
     background: var(--surface); border: 1.5px solid var(--border);
     border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px 20px;
+    /* Contexte d'empilement, pour que le filigrane centré passe SOUS le texte
+       (cf. main::after, z-index:-1) tout en restant au-dessus du fond blanc. */
+    z-index: 0;
   }
-  /* Logo en filigrane, décoratif (pointer-events:none pour ne rien intercepter). */
+  /* Logo en filigrane, centré dans la carte, décoratif
+     (pointer-events:none pour ne rien intercepter au clic). */
   main::after {
-    /* 148 × 62 = le ratio réel du logo (854×359) : `contain` ne recadre rien. */
-    content: ""; position: absolute; right: 12px; bottom: 14px; width: 148px; height: 62px;
-    background: url("anset_brand_logo_TAHITI.png") right bottom / contain no-repeat;
+    /* `inset:0` : le pseudo-élément épouse la carte, `center` fait le centrage sur les
+       deux axes. Largeur plafonnée en % pour ne jamais déborder sur petit écran ;
+       hauteur `auto` → le ratio réel du logo (854×359) est conservé. */
+    content: ""; position: absolute; inset: 0; z-index: -1;
+    background: url("anset_brand_logo_TAHITI.png") center / min(220px, 62%) auto no-repeat;
     opacity: .05; pointer-events: none;
   }
   main.done::after { display: none; }
