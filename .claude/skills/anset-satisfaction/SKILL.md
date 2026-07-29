@@ -29,8 +29,14 @@ reponses_satisfaction (toujours)  +  leads (si consentement ET contact)
 ```
 
 Diffusion mensuelle : import `.xlsx` → `envois_sondage` → Edge Function `envoi-sondage`
-(Brevo, lien personnalisé, programmé H+2). Modes diag : `?dry=1`, `?test=x@y.pf`,
-`?campagne=YYYY-MM`, `?limit=N`.
+(**relais SMTP Brevo** via `npm:nodemailer`, lien personnalisé, envoi immédiat). Modes diag :
+`?dry=1`, `?test=x@y.pf`, `?campagne=YYYY-MM`, `?limit=N`.
+
+**Pourquoi SMTP et pas l'API Brevo** : l'API refuse les IP inconnues et l'IP de sortie des Edge
+Functions change à chaque invocation (liste blanche impossible) ; les clés SMTP échappent à ce
+filtrage. Conséquences : **pas de template transactionnel Brevo** (le sujet + le HTML vivent dans
+`supabase/functions/envoi-sondage/email.ts`, source de vérité ; `scripts/brevo_invitation.html` n'est
+qu'un aperçu) et **pas de `scheduledAt`** (le décalage H+2 a disparu). Ne pas « remettre » l'API.
 
 ## Modèle de données réel (points sensibles — NE PAS deviner)
 
@@ -89,6 +95,7 @@ les migrations suivantes l'enrichissent. Projet `xizitftoejfxaizztzeu` (eu-west-
 
 Le code local peut être en avance sur le déploiement. Ne pas affirmer qu'une migration
 est poussée, une fonction déployée ou un secret posé sans l'avoir confirmé. Secrets requis :
-`TURNSTILE_SECRET`, `BREVO_API_KEY`, `BREVO_TEMPLATE_ID`, `BREVO_SENDER_EMAIL`,
-`BREVO_SENDER_NAME`, `FORM_URL` (+ `ALLOWED_ORIGIN` optionnel). Côté `sondage.html`,
+`TURNSTILE_SECRET`, `BREVO_SMTP_LOGIN`, `BREVO_SMTP_KEY`, `BREVO_SENDER_EMAIL`,
+`BREVO_SENDER_NAME`, `FORM_URL` (+ `BREVO_SMTP_HOST`/`BREVO_SMTP_PORT`/`ALLOWED_ORIGIN`
+optionnels ; `BREVO_API_KEY`/`BREVO_TEMPLATE_ID` obsolètes). Côté `sondage.html`,
 la clé publique Turnstile `data-sitekey` doit être renseignée (placeholder par défaut).

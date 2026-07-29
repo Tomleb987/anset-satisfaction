@@ -1,10 +1,19 @@
 // =============================================================================
 // ANSET — Edge Function `envoi-sondage`  (verify_jwt=true : manager/service)
 // -----------------------------------------------------------------------------
-// Envoie les invitations au sondage via Brevo, à partir de la table
-// `envois_sondage` (lignes statut_envoi='a_envoyer' de la campagne du mois).
-// Chaque invitation porte un LIEN PERSONNALISÉ (agence, conseiller, req) →
-// réponse rattachée + lead pré-attribué. Programmé "à chaud" à H+2 (scheduledAt).
+// Envoie les invitations au sondage via le RELAIS SMTP Brevo, à partir de la
+// table `envois_sondage` (lignes statut_envoi='a_envoyer' de la campagne du mois).
+// Chaque invitation porte un LIEN PERSONNALISÉ (agence, conseiller, req, motif) →
+// réponse rattachée + lead pré-attribué.
+//
+// POURQUOI SMTP ET PLUS L'API : Brevo bloque les appels API venant d'une IP
+// inconnue et l'IP de sortie des Edge Functions change à chaque invocation
+// (liste blanche impossible). Les clés SMTP, elles, ne sont pas soumises à ce
+// filtrage IP. Conséquences assumées de ce choix :
+//   - pas de template transactionnel Brevo : le HTML est construit ici
+//     (voir `email.ts`, source de vérité du visuel) ;
+//   - pas de programmation H+2 (`scheduledAt` est une fonctionnalité de l'API) :
+//     l'envoi part immédiatement.
 //
 // Idempotent : une ligne passée à 'envoye' n'est jamais renvoyée.
 //
@@ -13,16 +22,18 @@
 //   ?campagne=YYYY-MM cible une campagne précise
 //   ?limit=N          plafonne le lot (défaut 500)
 //   ?dry=1            simule : ne contacte pas Brevo, ne modifie rien
-//   ?test=a@b.pf      TEST : envoie 1 invitation à cette adresse, tout de suite
-//                     (pas de programmation H+2), ne modifie rien
+//   ?test=a@b.pf      TEST : envoie 1 invitation à cette adresse, ne modifie rien
 //
-// Secrets/env : BREVO_API_KEY, BREVO_TEMPLATE_ID, FORM_URL,
-//               BREVO_SENDER_EMAIL, BREVO_SENDER_NAME (optionnels si gérés au template),
+// Secrets/env : BREVO_SMTP_LOGIN, BREVO_SMTP_KEY, BREVO_SENDER_EMAIL,
+//               BREVO_SENDER_NAME (optionnel, défaut "ANSET"), FORM_URL,
 //               SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (auto).
-// Env optionnel : ALLOWED_ORIGIN (restreindre le CORS ; défaut "*").
+// Env optionnels : BREVO_SMTP_HOST (défaut smtp-relay.brevo.com),
+//                  BREVO_SMTP_PORT (défaut 587), ALLOWED_ORIGIN (défaut "*").
 // =============================================================================
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import nodemailer from "npm:nodemailer@^9";
+import { SUJET, htmlInvitation, texteInvitation } from "./email.ts";
 
 const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") ?? "*";
 
@@ -60,25 +71,9 @@ function lienPersonnalise(formUrl: string, row: EnvoiRow): string {
   return u.toString();
 }
 
-/** Appel API Brevo (transactional email). Retourne {ok, info}. */
-async function envoyerBrevo(
-  apiKey: string,
-  templateId: number,
-  to: { email: string; name?: string },
-  params: Record<string, unknown>,
-  scheduledAt: string | null,
-  sender: { email?: string; name?: string },
-): Promise<{ ok: boolean; info: unknown }> {
-  const body: Record<string, unknown> = { to: [to], templateId, params };
-  if (scheduledAt) body.scheduledAt = scheduledAt;
-  if (sender.email) body.sender = { email: sender.email, name: sender.name };
-  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
-    method: "POST",
-    headers: { "api-key": apiKey, "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify(body),
-  });
-  const info = await res.json().catch(() => ({}));
-  return { ok: res.ok, info };
+/** Adresse « From » au format RFC (nom affiché + adresse validée côté Brevo). */
+function expediteur(name: string, email: string): string {
+  return `"${name.replace(/"/g, "")}" <${email}>`;
 }
 
 Deno.serve(async (req: Request) => {
@@ -95,18 +90,22 @@ Deno.serve(async (req: Request) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   // .trim() : un espace ou un saut de ligne collé dans le champ secret est
-  // invisible dans l'UI et fait répondre « Key not found » à Brevo.
-  const apiKey = Deno.env.get("BREVO_API_KEY")?.trim();
-  const templateId = parseInt(Deno.env.get("BREVO_TEMPLATE_ID")?.trim() ?? "0", 10);
+  // invisible dans l'UI et fait échouer l'authentification SMTP.
+  const smtpHost = Deno.env.get("BREVO_SMTP_HOST")?.trim() || "smtp-relay.brevo.com";
+  const smtpPort = parseInt(Deno.env.get("BREVO_SMTP_PORT")?.trim() ?? "587", 10) || 587;
+  const smtpLogin = Deno.env.get("BREVO_SMTP_LOGIN")?.trim();
+  const smtpKey = Deno.env.get("BREVO_SMTP_KEY")?.trim();
   const formUrl = Deno.env.get("FORM_URL")?.trim();
-  const sender = {
-    email: Deno.env.get("BREVO_SENDER_EMAIL")?.trim() || undefined,
-    name: Deno.env.get("BREVO_SENDER_NAME")?.trim() || undefined,
-  };
+  const senderEmail = Deno.env.get("BREVO_SENDER_EMAIL")?.trim();
+  const senderName = Deno.env.get("BREVO_SENDER_NAME")?.trim() || "ANSET";
 
   if (!supabaseUrl || !serviceRole) return json({ ok: false, error: "Config Supabase incomplète." }, 500);
   if (!formUrl) return json({ ok: false, error: "FORM_URL manquant." }, 500);
-  if (!dry && (!apiKey || !templateId)) return json({ ok: false, error: "BREVO_API_KEY ou BREVO_TEMPLATE_ID manquant." }, 500);
+  // En SMTP l'expéditeur n'est plus porté par le template : il devient obligatoire.
+  if (!dry && (!smtpLogin || !smtpKey)) {
+    return json({ ok: false, error: "BREVO_SMTP_LOGIN ou BREVO_SMTP_KEY manquant." }, 500);
+  }
+  if (!dry && !senderEmail) return json({ ok: false, error: "BREVO_SENDER_EMAIL manquant." }, 500);
 
   const supabase = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false } });
 
@@ -130,50 +129,75 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true, campagne, traites: 0, message: "Aucun envoi 'a_envoyer'." });
   }
 
-  // H+2 (envoi à chaud programmé).
-  const scheduledAt = new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString();
-
-  // --- Mode TEST : une seule invitation à l'adresse fournie, rien n'est modifié.
-  if (testEmail) {
-    const r = rows[0] as EnvoiRow;
-    const lien = lienPersonnalise(formUrl, r);
-    if (dry) return json({ ok: true, test: true, dry: true, to: testEmail, lien, prenom: r.prenom });
-    // Envoi IMMÉDIAT (pas de scheduledAt) : un test programmé à H+2 n'arriverait que 2 h plus tard.
-    const { ok, info } = await envoyerBrevo(apiKey!, templateId, { email: testEmail, name: r.prenom ?? "" }, { lien, prenom: r.prenom ?? "" }, null, sender);
-    if (!ok) {
-      const detail = (info as { message?: string; code?: string })?.message ?? JSON.stringify(info);
-      return json({ ok: false, test: true, to: testEmail, error: `Brevo a refusé l'envoi : ${detail}`, brevo: info }, 502);
-    }
-    return json({ ok, test: true, to: testEmail, lien, brevo: info });
-  }
-
-  // --- Mode DRY : aperçu du lot sans envoi ni modification.
+  // --- Mode DRY : aperçu, aucune connexion SMTP, aucune écriture.
   if (dry) {
+    if (testEmail) {
+      const r = rows[0] as EnvoiRow;
+      return json({ ok: true, test: true, dry: true, to: testEmail, lien: lienPersonnalise(formUrl, r) });
+    }
     return json({
       ok: true, dry: true, campagne, aTraiter: rows.length,
       apercu: (rows as EnvoiRow[]).slice(0, 5).map((r) => ({ email: r.email, prenom: r.prenom, lien: lienPersonnalise(formUrl, r) })),
     });
   }
 
-  // --- Envoi réel, ligne par ligne, puis passage à 'envoye'.
-  let envoyes = 0;
-  const erreurs: Array<{ id: string; email: string | null; erreur: unknown }> = [];
-  for (const row of rows as EnvoiRow[]) {
-    const lien = lienPersonnalise(formUrl, row);
-    const { ok, info } = await envoyerBrevo(
-      apiKey!, templateId,
-      { email: row.email!, name: row.prenom ?? "" },
-      { lien, prenom: row.prenom ?? "" },
-      scheduledAt, sender,
-    );
-    if (!ok) { erreurs.push({ id: row.id, email: row.email, erreur: info }); continue; }
-    const { error: eUp } = await supabase
-      .from("envois_sondage")
-      .update({ statut_envoi: "envoye", date_envoi: now.toISOString() })
-      .eq("id", row.id);
-    if (eUp) { erreurs.push({ id: row.id, email: row.email, erreur: eUp.message }); continue; }
-    envoyes++;
-  }
+  // Une seule connexion réutilisée pour tout le lot (Brevo limite les connexions
+  // simultanées : maxConnections=1, envois séquentiels).
+  const transport = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465,      // 465 = TLS direct ; 587 = STARTTLS
+    requireTLS: smtpPort !== 465,  // refuse un 587 qui resterait en clair
+    auth: { user: smtpLogin!, pass: smtpKey! },
+    pool: true,
+    maxConnections: 1,
+  });
+  const from = expediteur(senderName, senderEmail!);
 
-  return json({ ok: erreurs.length === 0, campagne, envoyes, echecs: erreurs.length, scheduledAt, erreurs: erreurs.slice(0, 20) });
+  /** Envoie une invitation. Retourne l'erreur SMTP éventuelle. */
+  const envoyer = async (to: string, lien: string) => {
+    await transport.sendMail({
+      from, to, subject: SUJET,
+      html: htmlInvitation(lien),
+      text: texteInvitation(lien),
+    });
+  };
+
+  try {
+    // --- Mode TEST : une seule invitation à l'adresse fournie, rien n'est modifié.
+    if (testEmail) {
+      const r = rows[0] as EnvoiRow;
+      const lien = lienPersonnalise(formUrl, r);
+      try {
+        await envoyer(testEmail, lien);
+      } catch (e) {
+        const detail = e instanceof Error ? e.message : String(e);
+        return json({ ok: false, test: true, to: testEmail, error: `Brevo (SMTP) a refusé l'envoi : ${detail}` }, 502);
+      }
+      return json({ ok: true, test: true, to: testEmail, lien, transport: `${smtpHost}:${smtpPort}` });
+    }
+
+    // --- Envoi réel, ligne par ligne, puis passage à 'envoye'.
+    let envoyes = 0;
+    const erreurs: Array<{ id: string; email: string | null; erreur: unknown }> = [];
+    for (const row of rows as EnvoiRow[]) {
+      const lien = lienPersonnalise(formUrl, row);
+      try {
+        await envoyer(row.email!, lien);
+      } catch (e) {
+        erreurs.push({ id: row.id, email: row.email, erreur: e instanceof Error ? e.message : String(e) });
+        continue;
+      }
+      const { error: eUp } = await supabase
+        .from("envois_sondage")
+        .update({ statut_envoi: "envoye", date_envoi: now.toISOString() })
+        .eq("id", row.id);
+      if (eUp) { erreurs.push({ id: row.id, email: row.email, erreur: eUp.message }); continue; }
+      envoyes++;
+    }
+
+    return json({ ok: erreurs.length === 0, campagne, envoyes, echecs: erreurs.length, erreurs: erreurs.slice(0, 20) });
+  } finally {
+    transport.close();
+  }
 });

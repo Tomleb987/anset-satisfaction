@@ -10,11 +10,16 @@ Le sondage de satisfaction fonctionne ainsi :
 2. Une **Edge Function Supabase** `envoi-sondage` envoie un e-mail personnalisé à chaque client **via Brevo**.
 3. Le client clique, répond, et la réponse remonte dans le dashboard.
 
-**Ton rôle** : brancher Brevo (compte + clé API + un modèle d'e-mail) et renseigner 5 « secrets » côté Supabase. Le code est déjà déployé, rien à développer.
+**Ton rôle** : brancher Brevo (compte + **clé SMTP**) et renseigner 5 « secrets » côté Supabase. Le code est déjà déployé, rien à développer. **Pas de modèle d'e-mail à créer** : le HTML est embarqué dans la fonction.
 
-- Projet Supabase : **`xizitftoejfxaizztzeu`** (région eu-west-3, UE)
+- Projet Supabase : **`xizitftoejfxaizztzeu`** (région eu-west-1, UE)
 - App / formulaire : https://anset-satisfaction.vercel.app
-- Modèle d'e-mail (HTML prêt) : dépôt GitHub `Tomleb987/anset-satisfaction` → `scripts/brevo_invitation.html`
+- Aperçu de l'e-mail envoyé : dépôt GitHub `Tomleb987/anset-satisfaction` → `scripts/brevo_invitation.html`
+
+> **Pourquoi SMTP et pas l'API Brevo ?** L'API Brevo refuse les appels venant d'une IP inconnue, et
+> l'IP de sortie des Edge Functions Supabase change à chaque invocation : impossible de la mettre en
+> liste blanche. Le **relais SMTP** de Brevo n'applique pas ce filtrage → on garde la sécurité IP
+> activée sur le compte et l'envoi fonctionne.
 
 ---
 
@@ -24,85 +29,32 @@ Le sondage de satisfaction fonctionne ainsi :
 2. **Expéditeur** : *Settings → Senders, Domains & Dedicated IPs → Senders* → ajouter et **valider** une adresse d'envoi, ex. `assurances@anset.pf` (un e-mail de validation est envoyé).
 3. **Délivrabilité (important, ton domaine)** : *Domains* → authentifier le domaine `anset.pf` en publiant les enregistrements **SPF** et **DKIM** fournis par Brevo dans la zone DNS d'ANSET. Sans ça, les e-mails risquent le dossier spam.
 
-## Étape 2 — Clé API
+## Étape 2 — Clé SMTP
 
-1. *Settings → SMTP & API → API Keys → Generate a new API key*.
-2. Nommer la clé (ex. « sondage-satisfaction »), la copier.
-   → format : `xkeysib-xxxxxxxx...`  **(à garder secrète)**.
+1. *Settings → SMTP & API → onglet **SMTP***.
+2. Relever **deux** valeurs :
+   - le **Login** (généralement l'adresse du compte Brevo, parfois un identifiant du type
+     `xxxxxxx@smtp-brevo.com`) ;
+   - la **clé SMTP** (*SMTP key / master password*) → *Generate a new SMTP key* si aucune n'est
+     affichée. Format `xsmtpsib-…`. **À garder secrète.**
+3. Serveur d'envoi : `smtp-relay.brevo.com`, port `587` (STARTTLS). Ce sont les valeurs par défaut
+   du code : rien à saisir, sauf si Brevo t'indique autre chose (voir étape 4, secrets optionnels).
 
-## Étape 3 — Modèle d'e-mail (template transactionnel)
+> ⚠️ Ne **pas** utiliser une clé **API** (`xkeysib-…`) : c'est elle qui est soumise au filtrage IP
+> (encadré « Pourquoi SMTP » en haut de ce document).
 
-1. *Campaigns → Templates → onglet **Transactional** → Create a template*.
-2. Renseigner :
-   - **Template name** : `Invitation sondage ANSET`
-   - **Subject** : `Votre avis sur ANSET en 1 minute`
-   - **Preview text** : `Aidez-nous à améliorer nos services — c'est rapide et confidentiel.`
-   - **From** : l'expéditeur validé à l'étape 1 (`assurances@anset.pf`, nom « ANSET »).
-3. Choisir l'éditeur **« Code your own / HTML »**.
-4. **Coller le HTML ci-dessous** dans l'éditeur de code (identique au fichier `scripts/brevo_invitation.html` du dépôt) :
+## Étape 3 — Modèle d'e-mail : rien à faire
 
-```html
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F7F9FC;margin:0;padding:24px 0;font-family:'DM Sans',Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
-  <tr><td align="center">
-    <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#ffffff;border:1px solid #dde3ec;border-radius:16px;overflow:hidden;">
-      <tr><td style="height:4px;background:#1C509D;background:linear-gradient(90deg,#1C509D,#715689);"></td></tr>
-      <tr><td align="center" style="padding:28px 40px 8px;">
-        <img src="https://anset-satisfaction.vercel.app/anset_brand_logo_TAHITI.png" alt="ANSET Assurances" width="150" style="display:block;height:auto;max-width:150px;" />
-      </td></tr>
-      <tr><td style="padding:8px 40px 0;">
-        <h1 style="margin:16px 0 6px;font-size:22px;line-height:1.3;color:#16233c;font-weight:800;">Votre avis compte pour nous</h1>
-        <p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#16233c;">Ia Ora Na,</p>
-        <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#5d6b83;">
-          Chez <strong style="color:#16233c;">ANSET</strong>, votre satisfaction est notre priorité.
-          Pourriez-vous prendre <strong style="color:#16233c;">une petite minute</strong> pour nous dire
-          comment s'est passée votre expérience&nbsp;? Vos réponses nous aident à améliorer nos services au quotidien.
-        </p>
-      </td></tr>
-      <tr><td align="center" style="padding:6px 40px 4px;">
-        <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-          <td align="center" style="border-radius:12px;background:#1C509D;">
-            <a href="{{ params.lien }}" target="_blank"
-               style="display:inline-block;padding:15px 34px;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:12px;">
-              Donner mon avis
-            </a>
-          </td>
-        </tr></table>
-      </td></tr>
-      <tr><td align="center" style="padding:10px 40px 0;">
-        <p style="margin:0;font-size:12.5px;color:#93a1b8;">Le questionnaire est court et confidentiel.</p>
-      </td></tr>
-      <tr><td style="padding:18px 40px 0;">
-        <p style="margin:0;font-size:12px;line-height:1.5;color:#93a1b8;">
-          Le bouton ne fonctionne pas&nbsp;? Copiez ce lien dans votre navigateur&nbsp;:<br>
-          <a href="{{ params.lien }}" style="color:#1C509D;word-break:break-all;">{{ params.lien }}</a>
-        </p>
-      </td></tr>
-      <tr><td style="padding:22px 40px 0;"><div style="border-top:1px solid #eef2f7;"></div></td></tr>
-      <tr><td style="padding:16px 40px 30px;">
-        <p style="margin:0;font-size:11.5px;line-height:1.6;color:#93a1b8;">
-          Cet e-mail vous est adressé par <strong style="color:#5d6b83;">ANSET</strong> (responsable du traitement)
-          dans le cadre de la mesure de la satisfaction client. Vos données sont hébergées dans l'Union européenne
-          et conservées 12&nbsp;mois maximum. Vous disposez d'un droit d'accès, de rectification et de suppression&nbsp;:
-          <a href="mailto:dpo@anset.pf" style="color:#1C509D;">dpo@anset.pf</a> ·
-          <a href="https://www.anset.pf/assets/pdf/rgpd.pdf" style="color:#1C509D;">Politique de confidentialité</a>.
-        </p>
-      </td></tr>
-    </table>
-    <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;">
-      <tr><td align="center" style="padding:16px 20px;">
-        <p style="margin:0;font-size:11.5px;color:#93a1b8;font-family:'DM Sans',Segoe UI,Roboto,Arial,sans-serif;">
-          ANSET Assurances — Tahiti, Polynésie française
-        </p>
-      </td></tr>
-    </table>
-  </td></tr>
-</table>
-```
+Le relais SMTP n'utilise pas les templates transactionnels Brevo : le **sujet et le HTML de
+l'invitation sont embarqués dans le code** de la fonction
+(`supabase/functions/envoi-sondage/email.ts`). Un aperçu lisible du rendu se trouve dans
+`scripts/brevo_invitation.html`.
 
-5. **Save & Activate** le template.
-6. Relever son **ID** (nombre visible dans la liste des templates, ex. `3`).
-
-> ⚠️ Le modèle contient la variable **`{{ params.lien }}`** (le lien personnalisé de chaque client). Ne pas la retirer : c'est elle qui rattache la réponse à la bonne agence / au bon conseiller. Il n'y a **pas** de personnalisation du prénom (e-mail générique « Ia Ora Na, »).
+- Sujet envoyé : **Votre avis sur ANSET en 1 minute**
+- Le lien personnalisé de chaque client est inséré par la fonction (bouton « Donner mon avis » +
+  lien de secours en clair, pour les clients mail qui bloquent les boutons).
+- L'e-mail est générique (« Ia Ora Na, », pas de prénom) et porte la mention RGPD + contact DPO.
+- Faire évoluer le visuel = modifier `email.ts` puis redéployer la fonction (côté projet, Thomas).
 
 ## Étape 4 — Renseigner les 5 secrets Supabase
 
@@ -115,45 +67,44 @@ Ces valeurs sont lues par la fonction `envoi-sondage`. **Deux méthodes** au cho
 
 | Nom du secret | Valeur |
 |---|---|
-| `BREVO_API_KEY` | la clé `xkeysib-…` de l'étape 2 |
-| `BREVO_TEMPLATE_ID` | l'ID du template de l'étape 3 (un nombre) |
+| `BREVO_SMTP_LOGIN` | le **login SMTP** de l'étape 2 |
+| `BREVO_SMTP_KEY` | la **clé SMTP** `xsmtpsib-…` de l'étape 2 |
 | `FORM_URL` | `https://anset-satisfaction.vercel.app/sondage` |
-| `BREVO_SENDER_EMAIL` | `assurances@anset.pf` (l'expéditeur validé) |
+| `BREVO_SENDER_EMAIL` | `assurances@anset.pf` (l'expéditeur validé à l'étape 1) |
 | `BREVO_SENDER_NAME` | `ANSET` |
 
 3. Enregistrer. (La prise en compte est immédiate au prochain appel de la fonction.)
+
+Secrets **optionnels**, uniquement en cas de souci réseau : `BREVO_SMTP_HOST` (défaut
+`smtp-relay.brevo.com`) et `BREVO_SMTP_PORT` (défaut `587` ; mettre `465` si le 587 est filtré —
+le code bascule alors automatiquement en TLS direct).
+
+Les anciens secrets `BREVO_API_KEY` et `BREVO_TEMPLATE_ID` **ne servent plus** : tu peux les
+supprimer (ou laisser, ils sont ignorés).
 
 ### Méthode B — CLI Supabase (si tu préfères le terminal)
 ```bash
 supabase login                                  # token depuis dashboard → Account → Access Tokens
 supabase link --project-ref xizitftoejfxaizztzeu
 supabase secrets set \
-  BREVO_API_KEY=xkeysib-xxxxxxxx \
-  BREVO_TEMPLATE_ID=3 \
+  BREVO_SMTP_LOGIN=contact@anset.pf \
+  BREVO_SMTP_KEY=xsmtpsib-xxxxxxxx \
   FORM_URL=https://anset-satisfaction.vercel.app/sondage \
   BREVO_SENDER_EMAIL=assurances@anset.pf \
   BREVO_SENDER_NAME="ANSET"
 ```
 
-## Étape 4 bis — Sécurité IP Brevo (⚠️ à faire, sinon rien ne part)
+## Étape 4 bis — Sécurité IP Brevo : rien à désactiver
 
-Brevo peut bloquer les appels API venant d'une **IP inconnue** (« *We have detected you are using an
-unrecognised IP address …* »). Or la fonction `envoi-sondage` tourne sur l'infra Supabase, dont l'IP de
-sortie **n'est pas fixe** : elle change d'une invocation à l'autre. Mettre une IP en liste blanche ne
-tient donc pas dans le temps.
+C'est tout l'intérêt du passage en SMTP. Le blocage « *We have detected you are using an
+unrecognised IP address…* » ne concerne que l'**API**. Le relais SMTP s'authentifie par login + clé
+SMTP, sans contrôle d'IP.
 
-1. Aller sur https://app.brevo.com/security/authorised_ips *(ou : ton nom en haut à droite → **Security**
-   → **Authorized IPs**)*.
-2. **Désactiver « Block unknown IP addresses »**.
-
-Compromis assumé : la clé API redevient le seul facteur d'authentification. Elle ne vit que dans les
-secrets Supabase (jamais dans le dépôt, jamais dans le HTML public) et reste révocable/rotable en un clic
-depuis *SMTP & API → API Keys*. Garder le blocage IP actif imposerait un serveur d'envoi à IP fixe, donc
-de sortir des Edge Functions : disproportionné pour ce volume.
-
-> À savoir : Brevo applique une « learning phase » qui autorise automatiquement les nouvelles IP au
-> démarrage, puis **active le blocage de lui-même** si aucune nouvelle IP n'apparaît pendant 30 jours.
-> Le blocage peut donc surgir sur un compte qui fonctionnait jusque-là.
+- **Laisser « Block unknown IP addresses » ACTIVÉ** sur https://app.brevo.com/security/authorised_ips.
+- Si cette option avait été désactivée pour faire fonctionner l'ancienne version par API, tu peux
+  la **réactiver**.
+- La clé SMTP ne vit que dans les secrets Supabase (jamais dans le dépôt, jamais dans le HTML
+  public) et reste révocable/rotable en un clic depuis *SMTP & API → onglet SMTP*.
 
 ## Étape 5 — Test de bout en bout
 
@@ -162,18 +113,24 @@ Depuis l'app de pilotage : https://anset-satisfaction.vercel.app/satisfaction_an
 
 1. **Aperçu (aucun envoi)** : vérifie que le lot est prêt et affiche un exemple de lien. *(Aucun e-mail parti.)*
 2. **Test (1 e-mail)** : saisir ta propre adresse → tu dois recevoir l'e-mail « Ia Ora Na » avec le bouton « Donner mon avis ». Clique → le formulaire s'ouvre.
-3. **Envoi réel** : lance la diffusion de la campagne (programmée à H+2 côté Brevo).
+3. **Envoi réel** : lance la diffusion de la campagne. Les e-mails partent **immédiatement**, un par
+   un (le SMTP ne sait pas programmer un envoi ; l'ancien décalage « H+2 » n'existe plus).
 
 ## Vérifications / dépannage
 
 - **Rien ne part / erreur config** : un des 5 secrets est manquant ou mal orthographié (respecter les noms exacts, en MAJUSCULES).
-- **Erreur Brevo dans l'aperçu** : clé API invalide, ou expéditeur non validé, ou `BREVO_TEMPLATE_ID` incorrect.
-- **« unrecognised IP address »** : la sécurité IP de Brevo bloque l'appel → étape 4 bis (désactiver
-  « Block unknown IP addresses »). Autoriser l'IP citée débloque le coup suivant seulement : elle change.
+- **« Invalid login » / « authentication failed »** : `BREVO_SMTP_LOGIN` ou `BREVO_SMTP_KEY` incorrect —
+  attention à ne pas coller une clé **API** (`xkeysib-…`) à la place de la clé **SMTP** (`xsmtpsib-…`),
+  et à ne pas laisser d'espace en fin de valeur.
+- **« Sender not valid » / e-mail refusé** : l'adresse de `BREVO_SENDER_EMAIL` n'est pas validée dans
+  Brevo (étape 1.2).
+- **Timeout / connexion impossible** : le port 587 est filtré → mettre le secret `BREVO_SMTP_PORT=465`.
 - **Envoi réel partiel** (`envoyes` < lot, `echecs` > 0) : les lignes en échec restent `a_envoyer` — il
   suffit de relancer « Envoi réel » après correction, aucun doublon (la fonction est idempotente).
+  Attention aussi au quota du plan (≈ 300 e-mails/jour en gratuit) : au-delà, Brevo refuse les envois.
 - **E-mails en spam** : authentifier le domaine (SPF/DKIM, étape 1.3).
-- **Le lien du bouton est vide** : la variable `{{ params.lien }}` a été supprimée du template → la remettre.
+- **Le lien du bouton est vide** : problème côté données (`envois_sondage` sans référence) ou `FORM_URL`
+  mal renseigné → le vérifier avec « Aperçu (aucun envoi) », qui affiche un exemple de lien.
 - **Logs** : Supabase → *Edge Functions → envoi-sondage → Logs* pour voir le détail des erreurs.
 
 ## Ce que tu n'as PAS à faire

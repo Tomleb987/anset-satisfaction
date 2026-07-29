@@ -17,7 +17,7 @@ reponses_satisfaction (toujours)  +  leads (si consentement & contact)
 ```
 
 Diffusion mensuelle : import de la « requête » `.xlsx` → table `envois_sondage` → Edge Function
-`envoi-sondage` (Brevo, lien personnalisé, programmé à H+2). Un **second import** mensuel — la liste
+`envoi-sondage` (relais **SMTP** Brevo, lien personnalisé, départ immédiat). Un **second import** mensuel — la liste
 des **sinistres clos** `.xlsx` — alimente les mêmes `envois_sondage` avec `motif='sinistre'` : ces
 clients reçoivent le questionnaire **adapté sinistre** (2 questions en plus). Le lien porte alors
 `?motif=sinistre` et le questionnaire pré-remplit / masque la question du motif.
@@ -32,7 +32,8 @@ supabase/
   config.toml                                   # verify_jwt: submit-sondage=false, envoi-sondage=true
   functions/
     submit-sondage/index.ts                     # form -> Turnstile -> reponses_satisfaction + leads
-    envoi-sondage/index.ts                       # envois_sondage -> Brevo (modes ?test / ?dry)
+    envoi-sondage/index.ts                       # envois_sondage -> SMTP Brevo (modes ?test / ?dry)
+    envoi-sondage/email.ts                       # sujet + HTML de l'invitation (source de vérité)
   migrations/
     20260723090200_base_schema.sql               # FONDATEUR : conseillers, reponses_satisfaction, leads, lead_notes, v_satisfaction_agence
     20260723090300_agences.sql                  # table agences (code -> nom/zone) + seed
@@ -83,10 +84,15 @@ satisfaction_anset.html                          # app 3 onglets : Satisfaction 
 3. **Secrets** :
    ```
    supabase secrets set TURNSTILE_SECRET=…            # Cloudflare Turnstile (clé secrète)
-   supabase secrets set BREVO_API_KEY=… BREVO_TEMPLATE_ID=… FORM_URL=https://…/sondage.html
+   supabase secrets set BREVO_SMTP_LOGIN=… BREVO_SMTP_KEY=…   # SMTP & API -> onglet SMTP
+   supabase secrets set FORM_URL=https://…/sondage.html
    supabase secrets set BREVO_SENDER_EMAIL=… BREVO_SENDER_NAME="ANSET"
-   # optionnel : ALLOWED_ORIGIN=https://votre-hebergement   (CORS de submit-sondage)
+   # optionnels : BREVO_SMTP_HOST (défaut smtp-relay.brevo.com), BREVO_SMTP_PORT (défaut 587),
+   #              ALLOWED_ORIGIN=https://votre-hebergement   (CORS de submit-sondage)
    ```
+   > L'envoi passe par le **relais SMTP** et non par l'API Brevo : l'API refuse les appels venant
+   > d'une IP inconnue, or l'IP de sortie des Edge Functions change à chaque invocation. Les clés
+   > SMTP ne subissent pas ce filtrage. `BREVO_API_KEY` / `BREVO_TEMPLATE_ID` ne servent plus.
 4. **Formulaire** : héberger `sondage.html` (GitHub Pages / Vercel) ; renseigner `TURNSTILE_SITEKEY`
    (clé site publique) dans le `<div class="cf-turnstile" data-sitekey="…">` **et** le commentaire de config.
    `SUBMIT_URL` est déjà pointé sur la fonction.
