@@ -357,12 +357,17 @@ const answers = { interaction: null, agence: null, motif: null, sat_sinistre: nu
 // Si le motif vient du lien : interaction implicite (le client a bien eu un contact).
 if (motifFromUrl) { answers.motif = motifFromUrl; answers.interaction = true; }
 
-// Pré-remplissage agence (modifiable).
+// Pré-remplissage agence (modifiable) — UNIQUEMENT si le lien porte une agence
+// de la liste. Les imports véhiculent aussi des équipes (« Commerciaux »…) qui ne
+// sont pas des agences : on ne les affiche pas au client, il choisit lui-même.
+// L'info d'origine n'est pas perdue pour autant : elle reste dans envois_sondage.
 if (urlAgence) {
+  const norm = s => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[’']/g, "'").replace(/\s+/g, " ").trim();
   const sel = document.getElementById("agence");
-  const opt = [...sel.options].find(o => o.value.toLowerCase() === urlAgence.toLowerCase() || o.text.toLowerCase() === urlAgence.toLowerCase());
+  const cible = norm(urlAgence);
+  const opt = [...sel.options].find(o => o.value !== "" && (norm(o.value) === cible || norm(o.text) === cible));
   if (opt) { sel.value = opt.value || opt.text; answers.agence = sel.value; }
-  else { const o = new Option(urlAgence, urlAgence, true, true); sel.add(o); answers.agence = urlAgence; }
 }
 
 // Couleur de la case sélectionnée : mêmes seuils que le dashboard
