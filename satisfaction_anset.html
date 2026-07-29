@@ -139,6 +139,17 @@
   table.bd .agc{color:var(--faint); font-weight:400; font-size:11.5px;}
   .cchip{display:inline-block; min-width:38px; padding:2px 8px; border-radius:7px; font-weight:700; font-variant-numeric:tabular-nums;}
   #leads th, #leads td{text-align:left;}
+  /* Prospection : la ligne porte deux menus déroulants et un bouton, larges par
+     nature. À huit colonnes le tableau dépassait les 1180 px de l'app et ne se
+     lisait qu'en faisant défiler (les colonnes de droite — statut, actions —
+     tombaient hors champ). Les colonnes descriptives sont donc regroupées deux à
+     deux, avec la donnée secondaire en sous-ligne : même information, cinq
+     colonnes. `.table-wrap` garde son scroll pour les très petits écrans. */
+  #leads td.wrap, #leads th.wrap{white-space:normal;}
+  #leads .sub{display:block; color:var(--faint); font-size:11.5px; font-weight:400;
+    margin-top:3px; line-height:1.45;}
+  #leads select{max-width:170px; padding:6px 9px; font-size:12.5px;}
+  #leads td.act{text-align:right;}
 
   /* Barres agences */
   .bars{display:flex; flex-direction:column; gap:11px;}
@@ -798,19 +809,23 @@ function renderLeads(){
   $("#p-empty").style.display=rows.length?"none":"block";
   const consOpts=l=>'<option value="">— Non attribué —</option>'
     +conseillersList.map(c=>`<option value="${esc(c.id)}" ${c.id===l.traite_par?"selected":""}>${esc(c.nom||nomFromSlug(c.id))}</option>`).join("");
-  $("#leads").innerHTML=`<thead><tr><th>Client</th><th>Contact</th><th>Agence</th><th>Campagne</th>`
-    +`<th data-tip="Conseiller qui a servi le client lors du contact sondé — l'origine du lead, pas son suivi.">Conseiller d'origine</th>`
+  // Cinq colonnes : « Client » porte le contact en sous-ligne, « Origine » regroupe
+  // agence, campagne et conseiller d'origine. Le statut n'a plus de pastille en
+  // plus de son menu — le menu lui-même est teinté par `st-<statut>`, la pastille
+  // ne faisait que répéter la valeur sélectionnée en occupant une colonne.
+  $("#leads").innerHTML=`<thead><tr><th class="wrap">Client</th>`
+    +`<th class="wrap" data-tip="Agence et campagne de l'invitation, puis le conseiller qui a servi le client lors du contact sondé — l'origine du lead, pas son suivi.">Origine</th>`
     +`<th data-tip="Conseiller qui prend le lead en charge. Modifiable ici.">Pris en charge par</th>`
-    +`<th>Statut</th><th></th></tr></thead><tbody>`+
+    +`<th data-tip="Avancement de la prospection. Modifiable ici.">Statut</th><th></th></tr></thead><tbody>`+
     rows.map(l=>{ const nom=[l.prenom,l.nom].filter(Boolean).join(" ")||"—";
-      const contact=[l.telephone,l.email].filter(Boolean).map(esc).join("<br>")||"—";
+      const contact=[l.telephone,l.email].filter(Boolean).map(esc).join(" · ")||"—";
       const opts=STATUTS.map(s=>`<option value="${s}" ${s===l.statut?"selected":""}>${STATUT_LABELS[s]}</option>`).join("");
       const depuis=l.traite_par&&l.date_prise_en_charge?` data-tip="Pris en charge le ${(l.date_prise_en_charge||"").slice(0,10)}"`:"";
-      return `<tr><td>${esc(nom)}</td><td class="mono">${contact}</td><td>${esc(l.agence||"—")}</td><td>${esc(l.campagne||"—")}</td>
-        <td>${esc(consLabel(l.conseiller_id))}</td>
+      return `<tr><td class="wrap">${esc(nom)}<span class="sub mono">${contact}</span></td>
+        <td class="wrap">${esc(l.agence||"—")}<span class="sub">${esc(l.campagne||"—")} · ${esc(consLabel(l.conseiller_id))}</span></td>
         <td${depuis}><select class="lead-pec" data-id="${l.id}">${consOpts(l)}</select></td>
-        <td><span class="pill-st st-${l.statut}">${STATUT_LABELS[l.statut]||l.statut}</span></td>
-        <td><select class="lead-st" data-id="${l.id}">${opts}</select> <button class="btn ghost lead-note" data-id="${l.id}">Note</button></td></tr>`;
+        <td><select class="lead-st st-${l.statut}" data-id="${l.id}">${opts}</select></td>
+        <td class="act"><button class="btn ghost lead-note" data-id="${l.id}">Note</button></td></tr>`;
     }).join("")+`</tbody>`;
   document.querySelectorAll(".lead-st").forEach(s=>s.addEventListener("change",onStatut));
   document.querySelectorAll(".lead-pec").forEach(s=>s.addEventListener("change",onPriseEnCharge));
