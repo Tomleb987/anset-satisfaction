@@ -43,11 +43,12 @@ supabase/
     20260723090600_rls_app.sql                   # policies RLS applicatives (authenticated)
     20260724120000_motif_sinistre.sql            # motif + mesures sinistre + vue v_satisfaction_motif
     20260729120000_profils_utilisateurs.sql      # table profils (roles super_admin/manager) + amorçage
+    20260729130000_admin_reserve_super_admin.sql # est_super_admin() + écritures envois/conseillers réservées
 scripts/
   purge_rgpd.sql                                # cron mensuel de purge des leads sans_suite/ne_pas_contacter
   desactivation_surveymonkey.md                  # état + actions (aucun cron déployé)
 sondage.html                                    # formulaire public : interaction ? oui → agence, motif, [sinistre], accueil, conseiller, NPS, CSAT, réseaux sociaux, commentaire ; non → recontact direct. + Turnstile + RGPD
-satisfaction_anset.html                          # app : Satisfaction (dont par motif + carte Sinistres) · Prospection · Administration (2 imports + diffusion) · Utilisateurs (super admin)
+satisfaction_anset.html                          # app : Satisfaction · Prospection · [super admin] Administration (2 imports + diffusion) · Utilisateurs
 ```
 
 > Projet Supabase `xizitftoejfxaizztzeu` (région `eu-west-1`, UE), configuré lors d'une session
@@ -111,8 +112,13 @@ Table `profils` (une ligne par compte `auth.users`), deux rôles :
 
 | Rôle | Peut |
 |---|---|
-| `manager` | Satisfaction, Prospection, imports, diffusion |
-| `super_admin` | idem + onglet **Utilisateurs** (créer un compte, changer un rôle, désactiver, supprimer) |
+| `manager` | onglets **Satisfaction** et **Prospection** uniquement |
+| `super_admin` | idem + **Administration** (imports, diffusion) et **Utilisateurs** (créer un compte, changer un rôle, désactiver, supprimer) |
+
+L'espace **Administration** est fermé au manager côté serveur, pas seulement masqué : les policies
+d'écriture de `envois_sondage` et `conseillers` exigent `public.est_super_admin()`, et `envoi-sondage`
+renvoie 403 à un manager. Sans ça, un manager pouvait importer un fichier ou lancer une diffusion
+depuis la console du navigateur.
 
 Créer un compte exige l'API admin de Supabase, donc la `service_role` : tout passe par l'Edge
 Function `admin-utilisateurs`, qui vérifie que l'appelant est `super_admin` **actif**. Le mot de passe

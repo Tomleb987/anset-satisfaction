@@ -1,7 +1,8 @@
 // =============================================================================
-// ANSET — Edge Function `envoi-sondage`  (réservée aux managers connectés)
-// Accès : utilisateur authentifié (JWT vérifié côté fonction, cf. « Authentification »)
-// ou clé service_role pour la relance interne. La clé publishable ne suffit PAS.
+// ANSET — Edge Function `envoi-sondage`  (réservée au super admin)
+// Accès : compte `super_admin` actif (JWT vérifié côté fonction, cf. « Authentification »)
+// ou clé service_role pour la relance interne. La clé publishable ne suffit PAS,
+// et un compte `manager` non plus : la diffusion appartient à l'Administration.
 // -----------------------------------------------------------------------------
 // Envoie les invitations au sondage via le RELAIS SMTP Brevo, à partir de la
 // table `envois_sondage` (lignes statut_envoi='a_envoyer' de la campagne du mois).
@@ -145,6 +146,13 @@ Deno.serve(async (req: Request) => {
     const { data: auth, error: eAuth } = await supabase.auth.getUser(bearer);
     if (eAuth || !auth?.user) {
       return json({ ok: false, error: "Accès refusé : cette action demande d'être connecté à l'app de pilotage." }, 401);
+    }
+    // La diffusion fait partie de l'espace Administration, réservé au super admin
+    // (un manager ne voit pas l'onglet, mais l'onglet n'est pas une sécurité).
+    const { data: profil } = await supabase
+      .from("profils").select("role, actif").eq("user_id", auth.user.id).maybeSingle();
+    if (!profil || profil.role !== "super_admin" || !profil.actif) {
+      return json({ ok: false, error: "Réservé au super administrateur." }, 403);
     }
   }
 

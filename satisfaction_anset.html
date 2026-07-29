@@ -209,8 +209,10 @@
     <div class="seg" id="tabs">
       <button class="on" data-view="satisfaction">Satisfaction</button>
       <button data-view="prospection">Prospection</button>
-      <button data-view="requete">Administration</button>
-      <!-- Onglet révélé au boot uniquement pour un super admin (cf. appliquerRole). -->
+      <!-- Administration et Utilisateurs : révélés au boot pour le seul super admin
+           (cf. appliquerRole). Le masquage est du confort, la barrière est la RLS
+           « est_super_admin() » et le contrôle dans les Edge Functions. -->
+      <button data-view="requete" id="tab-requete" hidden>Administration</button>
       <button data-view="utilisateurs" id="tab-utilisateurs" hidden>Utilisateurs</button>
     </div>
     <span class="who" id="who"></span>
@@ -498,7 +500,7 @@ function setAuth(logged,email){
   $("#gate").style.display=logged?"none":"flex"; $("#app").style.display=logged?"block":"none";
   currentUserEmail=email||null; $("#who").textContent=email||"";
   if(logged){ loadDashboard(); appliquerRole().catch(()=>{}); }
-  else { $("#tab-utilisateurs").hidden=true; monRole=null; monUserId=null; }
+  else { $("#tab-utilisateurs").hidden=true; $("#tab-requete").hidden=true; monRole=null; monUserId=null; }
 }
 $("#gate-btn").addEventListener("click", async ()=>{
   const email=$("#gate-email").value.trim(), password=$("#gate-pass").value; $("#gate-err").innerHTML="";
@@ -926,7 +928,16 @@ async function appliquerRole(){
     const {data}=await sb.from("profils").select("role").eq("user_id",monUserId).maybeSingle();
     monRole=data?.role||null;
   }
-  $("#tab-utilisateurs").hidden = monRole!=="super_admin";
+  const admin = monRole==="super_admin";
+  $("#tab-utilisateurs").hidden = !admin;
+  $("#tab-requete").hidden = !admin;
+  // Un manager ne doit jamais rester sur un onglet qu'il n'a plus le droit de voir
+  // (rôle rétrogradé pendant la session, onglet actif au moment du changement).
+  if(!admin){
+    const actif=document.querySelector("#tabs button.on");
+    if(actif && (actif.dataset.view==="requete"||actif.dataset.view==="utilisateurs"))
+      document.querySelector('#tabs button[data-view="satisfaction"]').click();
+  }
 }
 
 const uNotice=(m,k="ok")=>{ $("#u-notice").innerHTML=`<div class="notice ${k}">${esc(m)}</div>`; };
