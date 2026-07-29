@@ -13,7 +13,7 @@ create table if not exists public.agences (
 insert into public.agences (code, nom, zone, active) values
   ('1000','Papeete','Zone Est',true),
   ('1010','Taravao','Zone Ouest',true),
-  ('1011','Polynésie Assurances','Polynésie Assurance',true),
+  ('1011','Polynésie Assurances','Polynésie Assurances',true),
   ('1020','Punaauia','Zone Ouest',true),
   ('1030','Faa''a','Zone Ouest',true),
   ('1040','Fariipiti','Zone Est',true),

@@ -653,7 +653,11 @@ function renderBD(){
     // repli si la migration d'alignement n'est pas encore appliquée.
     rows=a.map(x=>norm2({name:x.agence,n:x.reponses,score:x.score_nps??x.nps_score,csat:x.csat_global,csatSin:x.csat_sinistre,delai:x.delai_reel,taux:D.tauxKey[camp+"|"+x.agence]})); }
   else { hdr="Conseiller"; const c=D.conseillers.filter(x=>x.campagne===camp); sub=`${c.length} conseiller(s)`;
-    rows=c.map(x=>norm2({name:x.conseiller_nom||x.conseiller_id,sub:x.agence,n:x.reponses,score:x.score_nps,csat:x.csat_global,csatSin:x.csat_sinistre,delai:x.delai_reel,taux:x.taux_reponse})); }
+    // Pas d'agence en sous-titre : `conseillers.agence` est déduite de l'import et
+    // ne vaut que pour la première ligne rencontrée, alors qu'un conseiller peut
+    // travailler pour plusieurs agences (ou pour l'équipe Commerciaux). L'afficher
+    // laissait croire à un rattachement fiable.
+    rows=c.map(x=>norm2({name:x.conseiller_nom||x.conseiller_id,n:x.reponses,score:x.score_nps,csat:x.csat_global,csatSin:x.csat_sinistre,delai:x.delai_reel,taux:x.taux_reponse})); }
   rows.sort((a,b)=>(b.score??-999)-(a.score??-999));
   $("#gran-sub").textContent=`Campagne ${camp} · ${sub}`;
   // « Réponses » compte les réponses rattachées à l'agence DÉCLARÉE par le client ;
