@@ -210,6 +210,8 @@
       <button class="on" data-view="satisfaction">Satisfaction</button>
       <button data-view="prospection">Prospection</button>
       <button data-view="requete">Administration</button>
+      <!-- Onglet révélé au boot uniquement pour un super admin (cf. appliquerRole). -->
+      <button data-view="utilisateurs" id="tab-utilisateurs" hidden>Utilisateurs</button>
     </div>
     <span class="who" id="who"></span>
     <button class="ghost" id="themeBtn" title="Thème">◐</button>
@@ -314,7 +316,7 @@
         <div class="adminrow"><label class="fld">Campagne <input type="month" id="r-campagne"></label></div>
         <label class="drop"><span class="ic">⬆︎</span><b>Choisir le fichier .xlsx / .csv</b><br>requête générale
           <input type="file" id="r-file" accept=".xlsx,.xls,.csv"></label>
-        <p class="sub" style="margin:12px 0 0">Dédoublonnage e-mail · exclusions (résilié non-paiement, e-mail manquant) · mapping agences · conseillers depuis « Gestionnaire ».</p>
+        <p class="sub" style="margin:12px 0 0">Dédoublonnage e-mail · exclusions (résilié non-paiement, e-mail manquant, invitation de moins d'un mois) · mapping agences · conseillers depuis « Gestionnaire ».</p>
         <div id="r-notice"></div><div id="r-report"></div>
       </div>
       <div class="card pad" style="border-left:4px solid var(--mauve)">
@@ -339,6 +341,39 @@
       <div id="d-notice"></div><div id="d-report"></div><div id="d-progress"></div>
     </div>
   </section>
+
+  <!-- ===================== UTILISATEURS (super admin) ===================== -->
+  <section class="view" id="view-utilisateurs">
+    <p class="sub" style="margin-bottom:16px">Comptes d'accès à l'app. Le <b>super administrateur</b> gère les comptes ; un <b>manager</b> accède au pilotage, à la prospection, aux imports et à la diffusion.</p>
+    <div class="grid2">
+      <div class="card pad">
+        <h2 class="title">Nouveau compte</h2>
+        <p class="sub">Le mot de passe provisoire s'affiche une fois : transmettez-le à la personne, qui le changera.</p>
+        <div class="adminrow" style="flex-wrap:wrap">
+          <label class="fld">E-mail <input type="email" id="u-email" placeholder="prenom.nom@anset.pf"></label>
+          <label class="fld">Nom <input type="text" id="u-nom" placeholder="Prénom Nom"></label>
+          <label class="fld">Rôle <select id="u-role">
+            <option value="manager">Manager</option>
+            <option value="super_admin">Super administrateur</option>
+          </select></label>
+          <button class="btn" id="u-creer">Créer le compte</button>
+        </div>
+        <div id="u-notice"></div><div id="u-secret"></div>
+      </div>
+      <div class="card pad" style="border-left:4px solid var(--mauve)">
+        <h2 class="title">Règles</h2>
+        <p class="sub" style="margin:0">
+          Un compte désactivé ne peut plus se connecter, son historique reste intact.<br>
+          Impossible de modifier, désactiver ou supprimer son propre compte — demandez-le à un autre super administrateur.<br>
+          Il doit toujours rester au moins un super administrateur actif.
+        </p>
+      </div>
+    </div>
+    <div class="card pad" style="margin-top:16px">
+      <h2 class="title">Comptes existants</h2>
+      <div class="table-wrap"><table class="bd" id="u-table"></table></div>
+    </div>
+  </section>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -356,6 +391,9 @@ const STATUTS=Object.keys(STATUT_LABELS);
 const MOTIF_LABELS={ souscription:"Souscription", sinistre:"Sinistre", gestion:"Gestion de contrat",
   reclamation:"Réclamation", information:"Information / conseil", autre:"Autre" };
 const MOIS=["janv.","févr.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."];
+// Délai minimum entre deux invitations au même client (anti-sollicitation).
+// Appliqué à l'import : une ligne trop récente est marquée 'exclu', jamais envoyée.
+const DELAI_SOLLICITATION_MOIS=1;
 
 // Objectif de score NPS du réseau. SOURCE UNIQUE : repère de la jauge, libellés,
 // ligne pointillée du graphe, seuils de couleur et verdicts en dépendent tous.
@@ -459,7 +497,8 @@ async function boot(){ initCible(); const {data}=await sb.auth.getSession(); set
 function setAuth(logged,email){
   $("#gate").style.display=logged?"none":"flex"; $("#app").style.display=logged?"block":"none";
   currentUserEmail=email||null; $("#who").textContent=email||"";
-  if(logged) loadDashboard();
+  if(logged){ loadDashboard(); appliquerRole().catch(()=>{}); }
+  else { $("#tab-utilisateurs").hidden=true; monRole=null; monUserId=null; }
 }
 $("#gate-btn").addEventListener("click", async ()=>{
   const email=$("#gate-email").value.trim(), password=$("#gate-pass").value; $("#gate-err").innerHTML="";
@@ -479,6 +518,7 @@ $("#tabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   $("#view-"+b.dataset.view).classList.add("active");
   if(b.dataset.view==="prospection") loadLeads();
+  if(b.dataset.view==="utilisateurs") chargerUtilisateurs();
   if(b.dataset.view==="requete"){ const m=new Date().toISOString().slice(0,7);
     ["#r-campagne","#s-campagne","#d-campagne"].forEach(s=>{ if(!$(s).value)$(s).value=m; });
     // État de la diffusion visible dès l'ouverture de l'onglet, sans rien lancer.
@@ -747,7 +787,7 @@ async function importFichier(buf,source){
   if(aoa.length<2) throw new Error("Fichier vide.");
   const idx=mapReqHeaders(aoa[0]); if(idx.email==null) throw new Error("Colonne e-mail introuvable.");
   const seen=new Set(),rows=[],cons={};
-  const stx={total:0,a_envoyer:0,exclu_resilie:0,exclu_email:0,doublons:0,autre:0,conseillers:0};
+  const stx={total:0,a_envoyer:0,exclu_resilie:0,exclu_email:0,exclu_recent:0,doublons:0,autre:0,conseillers:0};
   for(let r=1;r<aoa.length;r++){ const row=aoa[r]; stx.total++;
     const g=k=> idx[k]!=null?fixMojibake(String(row[idx[k]]??"").trim()):"";
     const email=g("email").toLowerCase();
@@ -767,6 +807,31 @@ async function importFichier(buf,source){
       motif:isSin?"sinistre":null, statut_envoi, motif_exclusion:motif_ex };
     if(isSin){ row2.date_ouverture=parseDate(g("ouverture")); row2.date_cloture=parseDate(g("cloture")); }
     rows.push(row2);
+  }
+  // --- Délai de sollicitation : un client déjà invité il y a moins de DELAI_SOLLICITATION_MOIS
+  // n'est pas réinvité. La contrainte (campagne, email) ne protège QUE dans le mois ;
+  // ce filtre-ci protège d'un mois sur l'autre. Les lignes concernées sont marquées
+  // 'exclu' à l'import, donc visibles dans le rapport et jamais envoyées.
+  const recents=new Set();
+  if(seen.size){
+    const seuil=new Date(); seuil.setMonth(seuil.getMonth()-DELAI_SOLLICITATION_MOIS);
+    const iso=seuil.toISOString();
+    // Pagination plutôt qu'un `.in(email,…)` : la liste des envois récents est bornée
+    // (un mois de campagne) et on évite une URL de plusieurs milliers de caractères.
+    for(let from=0;;from+=1000){
+      const {data,error}=await sb.from("envois_sondage").select("email")
+        .eq("statut_envoi","envoye").gte("date_envoi",iso).not("email","is",null)
+        .range(from,from+999);
+      if(error) throw new Error("délai de sollicitation : "+error.message);
+      data.forEach(x=>{ if(seen.has(x.email)) recents.add(x.email); });
+      if(data.length<1000) break;
+    }
+    for(const r of rows){
+      if(r.email && r.statut_envoi==="a_envoyer" && recents.has(r.email)){
+        r.statut_envoi="exclu"; r.motif_exclusion=`invitation de moins de ${DELAI_SOLLICITATION_MOIS} mois`;
+        stx.a_envoyer--; stx.exclu_recent++;
+      }
+    }
   }
   const consList=Object.values(cons); stx.conseillers=consList.length;
   for(let i=0;i<consList.length;i+=200){ const {error}=await sb.from("conseillers").upsert(consList.slice(i,i+200),{onConflict:"id",ignoreDuplicates:true}); if(error) throw new Error("conseillers : "+error.message); }
@@ -789,7 +854,7 @@ function bindImport(fileSel,source,noticeSel,reportSel){
       $(reportSel).innerHTML=`<div class="mini-kpis">
         <div class="mk"><div class="n num">${st.total}</div><div class="l">Lignes fichier</div></div>
         <div class="mk"><div class="n num">${st.a_envoyer}</div><div class="l">À envoyer</div></div>
-        <div class="mk"><div class="n num">${st.exclu_resilie+st.exclu_email}</div><div class="l">Exclus (${st.exclu_resilie} résiliés · ${st.exclu_email} sans e-mail)</div></div>
+        <div class="mk"><div class="n num">${st.exclu_resilie+st.exclu_email+st.exclu_recent}</div><div class="l">Exclus (${st.exclu_resilie} résiliés · ${st.exclu_email} sans e-mail · ${st.exclu_recent} sollicités &lt; ${DELAI_SOLLICITATION_MOIS} mois)</div></div>
         <div class="mk"><div class="n num">${st.doublons}</div><div class="l">Doublons${st.autre?` · ${st.autre} « Autre »`:""}</div></div></div>`;
     }catch(err){ notice("Import échoué : "+err.message,"err"); } e.target.value=""; };
     rd.readAsArrayBuffer(f);
@@ -832,6 +897,96 @@ function suivreProgression(camp){
       $("#d-notice").innerHTML=`<div class="notice err">Progression arrêtée : ${r.reste} invitation(s) encore en attente. Reclique « Envoi réel » — les lignes déjà envoyées ne repartent pas.</div>`; }
   },10000);
 }
+
+// ====================== UTILISATEURS (super admin) ======================
+// Toute la mécanique vit dans l'Edge Function `admin-utilisateurs` : créer un
+// compte suppose la clé service_role, qui ne descend jamais ici. Le masquage de
+// l'onglet est du confort — la vraie barrière est côté serveur.
+const ROLE_LABELS={ super_admin:"Super administrateur", manager:"Manager" };
+let monRole=null, monUserId=null;
+
+async function appelAdmin(corps){
+  const {data:{session}}=await sb.auth.getSession();
+  const res=await fetch(`${SB_URL}/functions/v1/admin-utilisateurs`,{
+    method:"POST",
+    headers:{ Authorization:`Bearer ${session.access_token}`, "Content-Type":"application/json" },
+    body:JSON.stringify(corps),
+  });
+  const j=await res.json().catch(()=>({}));
+  if(!res.ok || j.ok===false) throw new Error(j.error||"Action refusée.");
+  return j;
+}
+
+// Lit le rôle du compte connecté et révèle l'onglet si super admin.
+async function appliquerRole(){
+  monRole=null; monUserId=null;
+  const {data:{session}}=await sb.auth.getSession();
+  monUserId=session?.user?.id||null;
+  if(monUserId){
+    const {data}=await sb.from("profils").select("role").eq("user_id",monUserId).maybeSingle();
+    monRole=data?.role||null;
+  }
+  $("#tab-utilisateurs").hidden = monRole!=="super_admin";
+}
+
+const uNotice=(m,k="ok")=>{ $("#u-notice").innerHTML=`<div class="notice ${k}">${esc(m)}</div>`; };
+
+function renderUtilisateurs(rows){
+  $("#u-table").innerHTML=`<thead><tr><th>E-mail</th><th>Nom</th><th>Rôle</th><th>État</th><th>Créé le</th><th></th></tr></thead><tbody>`+
+    rows.map(u=>{
+      const moi=u.user_id===monUserId;
+      const opts=Object.keys(ROLE_LABELS).map(r=>`<option value="${r}" ${r===u.role?"selected":""}>${ROLE_LABELS[r]}</option>`).join("");
+      // Sur sa propre ligne : aucune action. Se rétrograder ou se désactiver
+      // soi-même est le scénario classique de perte d'accès.
+      const actions=moi?`<span class="sub">vous</span>`:
+        `<select class="u-role" data-id="${u.user_id}">${opts}</select>
+         <button class="btn ghost u-actif" data-id="${u.user_id}" data-actif="${u.actif?1:0}">${u.actif?"Désactiver":"Réactiver"}</button>
+         <button class="btn ghost u-suppr" data-id="${u.user_id}" data-email="${esc(u.email)}">Supprimer</button>`;
+      return `<tr><td class="mono">${esc(u.email)}</td><td>${esc(u.nom||"—")}</td>
+        <td>${ROLE_LABELS[u.role]||esc(u.role)}</td>
+        <td>${u.actif?"Actif":"<b>Désactivé</b>"}</td>
+        <td>${u.created_at?new Date(u.created_at).toLocaleDateString("fr-FR"):"—"}</td>
+        <td>${actions}</td></tr>`;
+    }).join("")+`</tbody>`;
+  document.querySelectorAll(".u-role").forEach(s=>s.addEventListener("change",async e=>{
+    try{ const j=await appelAdmin({action:"role",user_id:e.target.dataset.id,role:e.target.value});
+      renderUtilisateurs(j.utilisateurs); uNotice("Rôle mis à jour."); }
+    catch(err){ uNotice(err.message,"err"); chargerUtilisateurs(); }
+  }));
+  document.querySelectorAll(".u-actif").forEach(b=>b.addEventListener("click",async e=>{
+    const actif=e.target.dataset.actif!=="1";
+    try{ const j=await appelAdmin({action:"actif",user_id:e.target.dataset.id,actif});
+      renderUtilisateurs(j.utilisateurs); uNotice(actif?"Compte réactivé.":"Compte désactivé : connexion bloquée."); }
+    catch(err){ uNotice(err.message,"err"); }
+  }));
+  document.querySelectorAll(".u-suppr").forEach(b=>b.addEventListener("click",async e=>{
+    const em=e.target.dataset.email;
+    if(!confirm(`Supprimer définitivement le compte ${em} ? Cette action est irréversible.`)) return;
+    try{ const j=await appelAdmin({action:"supprimer",user_id:e.target.dataset.id});
+      renderUtilisateurs(j.utilisateurs); uNotice(`Compte ${em} supprimé.`); }
+    catch(err){ uNotice(err.message,"err"); }
+  }));
+}
+
+async function chargerUtilisateurs(){
+  try{ const j=await appelAdmin({action:"liste"}); monUserId=j.moi||monUserId; renderUtilisateurs(j.utilisateurs||[]); }
+  catch(err){ uNotice(err.message,"err"); }
+}
+
+$("#u-creer").addEventListener("click",async ()=>{
+  const email=$("#u-email").value.trim().toLowerCase(), nom=$("#u-nom").value.trim(), role=$("#u-role").value;
+  if(!email){ uNotice("Renseigne une adresse e-mail.","err"); return; }
+  $("#u-secret").innerHTML=""; uNotice("Création en cours…");
+  try{
+    const j=await appelAdmin({action:"creer",email,nom,role});
+    uNotice(`Compte ${email} créé (${ROLE_LABELS[role]}).`);
+    // Le mot de passe provisoire n'est jamais stocké : affiché une seule fois.
+    $("#u-secret").innerHTML=`<div class="notice ok" style="margin-top:10px">Mot de passe provisoire, à transmettre puis à faire changer :
+      <span class="tag-mono" style="font-size:15px">${esc(j.motdepasse)}</span></div>`;
+    $("#u-email").value=""; $("#u-nom").value="";
+    await chargerUtilisateurs();
+  }catch(err){ uNotice(err.message,"err"); }
+});
 
 // Diffusion Brevo (appel authentifié à l'Edge Function)
 async function diffuser(mode){

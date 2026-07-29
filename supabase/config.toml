@@ -7,5 +7,11 @@ project_id = "xizitftoejfxaizztzeu"
 verify_jwt = false
 
 # Envoi Brevo → déclenché par un manager connecté (ou service key) : JWT requis.
+# Attention : verify_jwt accepte aussi la clé publishable (publique) — les deux
+# fonctions ci-dessous revérifient donc l'appelant elles-mêmes.
 [functions.envoi-sondage]
+verify_jwt = true
+
+# Gestion des comptes → réservée au super admin (contrôle dans la fonction).
+[functions.admin-utilisateurs]
 verify_jwt = true

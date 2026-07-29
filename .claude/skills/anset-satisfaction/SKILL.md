@@ -51,6 +51,12 @@ les migrations suivantes l'enrichissent. Projet `xizitftoejfxaizztzeu` (eu-west-
 
 - `response_id` : **unique** sur `reponses_satisfaction` ET `leads` → upsert idempotent
   (une re-soumission ne duplique pas).
+- **Anti-doublon / anti-sollicitation**, trois niveaux à ne pas casser : (1) dédoublonnage e-mail
+  dans le fichier à l'import (trim + minuscules, compté dans « Doublons ») ; (2) contrainte
+  `unique (campagne, email)` sur `envois_sondage` + upsert `ignoreDuplicates` → un seul envoi par
+  client et par mois ; (3) **délai de sollicitation** `DELAI_SOLLICITATION_MOIS` (1 mois, constante de
+  `satisfaction_anset.html`) : à l'import, un client dont un envoi est `envoye` avec `date_envoi` dans
+  la fenêtre est marqué `exclu` (`motif_exclusion`), donc jamais renvoyé le mois suivant.
 - `leads.conseiller_id` : **text**, FK → `conseillers.id` (slugs : `hina, teva, moana…`).
   Un slug d'URL invalide est **mis à null** côté fonction, jamais rejeté (ne pas casser l'insert).
 - `reponses_satisfaction.conseiller_id` : **PAS de FK** (on ne perd jamais une réponse
@@ -80,6 +86,13 @@ les migrations suivantes l'enrichissent. Projet `xizitftoejfxaizztzeu` (eu-west-
 - RLS active sur les tables ; policies `authenticated` (lecture dashboard + écritures
   prospection) définies dans `20260723090600_rls_app.sql`. **Les écritures serveur
   passent en service_role et bypassent la RLS** — ne pas ajouter de policy pour elles.
+- **Comptes & rôles** : table `profils` (`user_id`→`auth.users`, `email`, `nom`, `role`
+  ∈ {`super_admin`,`manager`}, `actif`). Lecture `authenticated`, **aucune policy d'écriture** :
+  tout passe par l'Edge Function `admin-utilisateurs` (service_role) qui exige un appelant
+  `super_admin` actif. `thomas@anset.pf` est le super admin amorcé. Un compte désactivé est **banni**
+  côté auth (`ban_duration`), `profils.actif` n'en est que le reflet. Garde-fous : pas d'action sur
+  soi-même, jamais moins d'un super admin actif. Mot de passe provisoire généré côté serveur,
+  affiché une fois.
 - `submit-sondage` est public (`verify_jwt=false`).
 - `envoi-sondage` : **`verify_jwt=true` ne suffit pas** — la passerelle accepte aussi la clé
   publishable, qui est en clair dans `satisfaction_anset.html`. La fonction vérifie donc elle-même

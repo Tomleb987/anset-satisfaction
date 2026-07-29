@@ -29,11 +29,12 @@ autre) est demandé au répondant pour la requête générale, et **imposé** po
 
 ```
 supabase/
-  config.toml                                   # verify_jwt: submit-sondage=false, envoi-sondage=true
+  config.toml                                   # verify_jwt: submit-sondage=false, autres=true
   functions/
     submit-sondage/index.ts                     # form -> Turnstile -> reponses_satisfaction + leads
     envoi-sondage/index.ts                       # envois_sondage -> SMTP Brevo (modes ?test / ?dry)
     envoi-sondage/email.ts                       # sujet + HTML de l'invitation (source de vérité)
+    admin-utilisateurs/index.ts                  # comptes d'accès (super admin only) : créer/rôle/désactiver
   migrations/
     20260723090200_base_schema.sql               # FONDATEUR : conseillers, reponses_satisfaction, leads, lead_notes, v_satisfaction_agence
     20260723090300_agences.sql                  # table agences (code -> nom/zone) + seed
@@ -41,11 +42,12 @@ supabase/
     20260723090500_reponses_dashboard.sql        # attribution + vues réseau/zone/conseiller/taux/verbatims
     20260723090600_rls_app.sql                   # policies RLS applicatives (authenticated)
     20260724120000_motif_sinistre.sql            # motif + mesures sinistre + vue v_satisfaction_motif
+    20260729120000_profils_utilisateurs.sql      # table profils (roles super_admin/manager) + amorçage
 scripts/
   purge_rgpd.sql                                # cron mensuel de purge des leads sans_suite/ne_pas_contacter
   desactivation_surveymonkey.md                  # état + actions (aucun cron déployé)
 sondage.html                                    # formulaire public : interaction ? oui → agence, motif, [sinistre], accueil, conseiller, NPS, CSAT, réseaux sociaux, commentaire ; non → recontact direct. + Turnstile + RGPD
-satisfaction_anset.html                          # app 3 onglets : Satisfaction (dont par motif + carte Sinistres) · Prospection · Requête (2 imports : requête + sinistres clos)
+satisfaction_anset.html                          # app : Satisfaction (dont par motif + carte Sinistres) · Prospection · Administration (2 imports + diffusion) · Utilisateurs (super admin)
 ```
 
 > Projet Supabase `xizitftoejfxaizztzeu` (région `eu-west-1`, UE), configuré lors d'une session
@@ -80,6 +82,7 @@ satisfaction_anset.html                          # app 3 onglets : Satisfaction 
    ```
    supabase functions deploy submit-sondage --no-verify-jwt
    supabase functions deploy envoi-sondage
+   supabase functions deploy admin-utilisateurs
    ```
 3. **Secrets** :
    ```
@@ -97,14 +100,37 @@ satisfaction_anset.html                          # app 3 onglets : Satisfaction 
 4. **Formulaire** : héberger `sondage.html` (GitHub Pages / Vercel) ; renseigner `TURNSTILE_SITEKEY`
    (clé site publique) dans le `<div class="cf-turnstile" data-sitekey="…">` **et** le commentaire de config.
    `SUBMIT_URL` est déjà pointé sur la fonction.
-5. **App** : `SB_ANON` est déjà renseignée (clé publishable). Créer un utilisateur
-   (Authentication → Users) pour l'accès Prospection/Requête.
+5. **App** : `SB_ANON` est déjà renseignée (clé publishable). Le **premier** compte se crée dans
+   Supabase (Authentication → Users) ; la migration `profils` en fait un `manager`, sauf
+   `thomas@anset.pf` qui est amorcé `super_admin`. Ensuite tout passe par l'onglet **Utilisateurs**.
 6. **Cron purge RGPD** : jouer `scripts/purge_rgpd.sql` (délai de conservation à valider).
+
+## Comptes et rôles
+
+Table `profils` (une ligne par compte `auth.users`), deux rôles :
+
+| Rôle | Peut |
+|---|---|
+| `manager` | Satisfaction, Prospection, imports, diffusion |
+| `super_admin` | idem + onglet **Utilisateurs** (créer un compte, changer un rôle, désactiver, supprimer) |
+
+Créer un compte exige l'API admin de Supabase, donc la `service_role` : tout passe par l'Edge
+Function `admin-utilisateurs`, qui vérifie que l'appelant est `super_admin` **actif**. Le mot de passe
+provisoire est généré côté serveur et affiché une seule fois. Un compte désactivé est banni côté auth
+(connexion refusée, `user_banned`), son historique reste intact. On ne peut ni se rétrograder, ni se
+désactiver, ni se supprimer soi-même, ni retirer le dernier super admin actif.
+
+`profils` est en lecture pour tout compte connecté (l'app doit connaître son propre rôle) et **sans
+policy d'écriture** : un manager ne peut donc pas se promouvoir.
 
 ## Diagnostic
 
 - `envoi-sondage?dry=1` → aperçu du lot sans envoi. `?test=adresse@x.pf` → 1 invitation de test.
-- `?campagne=YYYY-MM` cible une campagne ; `?limit=N` plafonne le lot.
+- `?campagne=YYYY-MM` cible une campagne ; `?limit=N` plafonne le lot par passage.
+- Gros lot : la fonction parallélise puis **se relance elle-même** (`?chaine=N`) — un seul clic. Le
+  compteur de l'onglet Administration lit l'avancement réel dans `envois_sondage`.
+- Anti-sollicitation : à l'import, un client déjà invité depuis moins de `DELAI_SOLLICITATION_MOIS`
+  (1 mois, constante de `satisfaction_anset.html`) est marqué `exclu` et n'est jamais renvoyé.
 
 ## Sécurité & RGPD
 
