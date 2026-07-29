@@ -150,6 +150,12 @@
     margin-top:3px; line-height:1.45;}
   #leads select{max-width:170px; padding:6px 9px; font-size:12.5px;}
   #leads td.act{text-align:right;}
+  /* Entonnoir : la colonne de droite porte l'effectif ET le taux de passage, donc
+     plus large que les 46 px d'une barre agence. */
+  #pp-funnel .bar{grid-template-columns:118px 1fr 92px;}
+  #pp-funnel .val{text-align:right;}
+  /* `.agc` n'est stylé que dans `table.bd` : le rappeler ici pour le taux de passage. */
+  #pp-funnel .val .agc{color:var(--faint); font-weight:400; font-size:11.5px;}
 
   /* Barres agences */
   .bars{display:flex; flex-direction:column; gap:11px;}
@@ -305,19 +311,62 @@
   </section>
 
   <!-- ===== PROSPECTION ===== -->
+  <!-- Deux écrans dans le même onglet : la LISTE (l'outil de travail du conseiller,
+       une ligne par lead) et le PILOTAGE (la lecture du manager : entonnoir de
+       conversion, portefeuilles, origine des leads). Un onglet de plus en haut aurait
+       dispersé la prospection ; le segment garde les deux lectures ensemble. -->
   <section class="view" id="view-prospection">
-    <div class="toolbar">
-      <select id="p-statut"></select>
-      <select id="p-agence"><option value="">Toutes les agences</option></select>
-      <select id="p-pec"><option value="">Tous les conseillers</option></select>
-      <input type="text" id="p-search" placeholder="Rechercher nom / email…" />
-      <div class="sp"></div>
+    <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:14px">
+      <div class="seg" id="pseg">
+        <button class="on" data-pview="liste">Liste des leads</button>
+        <button data-pview="pilotage">Pilotage</button>
+      </div>
+      <div class="sp" style="flex:1"></div>
       <button class="ghost" id="p-refresh">Actualiser</button>
     </div>
     <div id="p-notice"></div>
-    <div class="kpis" id="p-kpis"></div>
-    <div class="card pad"><div class="table-wrap"><table class="bd" id="leads"></table></div>
-      <div id="p-empty" class="empty" style="display:none">Aucun lead pour ces filtres.</div></div>
+
+    <div id="pv-liste">
+      <div class="toolbar">
+        <select id="p-statut"></select>
+        <select id="p-agence"><option value="">Toutes les agences</option></select>
+        <select id="p-pec"><option value="">Tous les conseillers</option></select>
+        <input type="text" id="p-search" placeholder="Rechercher nom / email…" />
+      </div>
+      <div class="kpis" id="p-kpis"></div>
+      <div class="card pad"><div class="table-wrap"><table class="bd" id="leads"></table></div>
+        <div id="p-empty" class="empty" style="display:none">Aucun lead pour ces filtres.</div></div>
+    </div>
+
+    <div id="pv-pilotage" style="display:none">
+      <div class="kpis" id="pp-kpis"></div>
+
+      <div class="card pad" style="margin-top:16px; border-left:4px solid var(--blue)">
+        <div class="eyebrow" style="color:var(--blue)">Entonnoir de conversion</div>
+        <div class="sub" style="margin:2px 0 0" id="pp-funnel-sub"></div>
+        <div class="bars" id="pp-funnel" style="margin-top:16px"></div>
+        <div class="herofoot" id="pp-funnel-foot" style="margin-top:14px"></div>
+      </div>
+
+      <div class="grid2" style="margin-top:16px">
+        <div class="card pad">
+          <h2 class="title" style="margin:0">Portefeuilles</h2>
+          <div class="sub" id="pp-porte-sub">Leads par conseiller qui les a pris en charge</div>
+          <div class="table-wrap" style="margin-top:12px"><table class="bd" id="pp-porte"></table></div>
+        </div>
+        <div class="card pad">
+          <h2 class="title" style="margin:0">Répartition par statut</h2>
+          <div class="sub">Où en est le stock de leads</div>
+          <div class="bars" id="pp-statuts" style="margin-top:16px"></div>
+        </div>
+      </div>
+
+      <div class="card pad" style="margin-top:16px">
+        <h2 class="title" style="margin:0">Origine des leads</h2>
+        <div class="sub">Agence du contact sondé — combien de réponses ont donné un lead</div>
+        <div class="table-wrap" style="margin-top:12px"><table class="bd" id="pp-origine"></table></div>
+      </div>
+    </div>
   </section>
 
   <!-- ===== ADMINISTRATION ===== -->
@@ -444,6 +493,13 @@ function stScore(v){ return v==null?["flat","—"]: v>=CIBLE_NPS?["good","Bon"]:
 function stCsat(v){ return v==null?["flat","—"]: v>=4?["good","Bon"]: v>=3?["warn","Moyen"]:["bad","Faible"]; }
 function stTaux(v){ return v==null?["flat","—"]: v>=15?["good","Bon"]: v>=10?["warn","Moyen"]:["bad","Faible"]; }
 function stDelai(v){ return v==null?["flat","—"]: v<=30?["good","Dans l'objectif"]: v<=40?["warn","À surveiller"]:["bad","Trop long"]; }
+// Le consentement au recontact a sa PROPRE échelle. Il était coloré par stTaux,
+// c'est-à-dire avec les seuils du taux de réponse (10 % / 15 %) : deux grandeurs
+// sans rapport — un client sur cinq qui accepte d'être rappelé n'est pas « bon »
+// au même sens qu'un questionnaire sur cinq qui revient. Seuils à confirmer côté
+// métier (provisoires : ils déterminent le volume de leads exploitables).
+function stConsent(v){ return v==null?["flat","—"]: v>=25?["good","Bon"]: v>=15?["warn","Moyen"]:["bad","Faible"]; }
+const consentColor=v=> v==null?cssv("--faint"): v<15?cssv("--bad") : v<25?cssv("--warn") : cssv("--good");
 const stCol=s=>({good:cssv("--good"),warn:cssv("--warn"),bad:cssv("--bad"),brand:cssv("--mauve"),flat:cssv("--muted")}[s]);
 
 // delta {invert:true si baisse = mieux}
@@ -600,7 +656,14 @@ function renderHero(){
   const pos=s==null?50:Math.max(0,Math.min(100,(s+100)/2));
   $("#h-mark").style.left=pos+"%";
   const nRep=r.nps_rep||0;
-  $("#h-foot").innerHTML=`Sur <b>${r.reponses||0} réponses</b> : <b style="color:var(--good)">${r.promoteurs||0} promoteurs</b>, ${r.passifs||0} passifs, <b style="color:var(--bad)">${r.detracteurs||0} détracteurs</b>.`
+  // « Sur N notes NPS », pas « sur N réponses » : les trois segments ci-dessous ne
+  // totalisent que les répondants AYANT NOTÉ. Un tiers des réponses n'a aucune note
+  // (clients ayant déclaré n'avoir eu aucun contact récent : le formulaire ne leur
+  // pose alors aucune question), donc l'ancienne phrase annonçait 48 réponses pour
+  // une décomposition qui en totalisait 32.
+  $("#h-foot").innerHTML=`Sur <b>${nRep} note${nRep>1?"s":""} NPS</b>`
+    + ((r.reponses||0)>nRep?` <span class="ctx">(${r.reponses} réponses au total, ${(r.reponses||0)-nRep} sans note)</span>`:"")
+    + ` : <b style="color:var(--good)">${r.promoteurs||0} promoteurs</b>, ${r.passifs||0} passifs, <b style="color:var(--bad)">${r.detracteurs||0} détracteurs</b>.`
     + (nRep>0 && nRep<MIN_FIABLE ? ` <b style="color:var(--warn)">Échantillon faible (${nRep} note${nRep>1?"s":""} NPS)</b> : chaque réponse déplace fortement le score.` : "")
     + (nRep===0 ? ` <b style="color:var(--muted)">Aucune note NPS pour l'instant.</b>` : "");
   // composition
@@ -623,15 +686,18 @@ function renderKPIs(){
   // (seuils stCsat 3 et 4 = 50 % et 75 %) : une seule échelle de jugement.
   const satPct=csatPct(r.csat_global);
   K.push({lbl:"Satisfaction globale",sig:"note sur 100",n:satPct==null?"—":Math.round(satPct),u:"%",st,pill,
-    ctx:`${fmt(r.csat_global,1)}/5 · ${r.reponses||0} réponse${(r.reponses||0)>1?"s":""}`,
+    // Base = les réponses ayant réellement noté la satisfaction (`csat_rep`), pas
+    // le total des réponses : annoncer 48 pour une moyenne calculée sur 32 revient
+    // à créditer la note d'une assise qu'elle n'a pas.
+    ctx:`${fmt(r.csat_global,1)}/5 · ${r.csat_rep??r.reponses??0} réponse${(r.csat_rep??r.reponses??0)>1?"s":""} notée${(r.csat_rep??r.reponses??0)>1?"s":""}`,
     delta:deltaTag(satPct,prevCamp?csatPct(rp.csat_global):null,{unit:" pts"}),
     spark:sparkline(serie("csat_global").map(csatPct),stCol(st))});
   [st,pill]=stCsat(r.csat_conseiller);
   K.push({lbl:"Qualité du conseiller",sig:"écoute, clarté",n:fmt(r.csat_conseiller,1),u:"/5",st,pill,ctx:"note du conseiller",delta:deltaTag(r.csat_conseiller,prevCamp?rp.csat_conseiller:null),spark:sparkline(serie("csat_conseiller"),stCol(st))});
   [st,pill]=stTaux(r.taux_reponse);
   K.push({lbl:"Taux de réponse",sig:"participation",n:r.taux_reponse==null?"—":Math.round(r.taux_reponse),u:"%",st,pill,ctx:`${r.reponses||0} rép. / ${r.envoyes||0} env.`,delta:deltaTag(r.taux_reponse,prevCamp?rp.taux_reponse:null,{unit:" pts"}),spark:sparkline(serie("taux_reponse"),stCol(st))});
-  [st,pill]=stTaux(r.taux_consentement);
-  K.push({lbl:"Recontacts acceptés",sig:"leads générés",n:r.taux_consentement==null?"—":Math.round(r.taux_consentement),u:"%",st,pill,ctx:`${r.consentements||0} leads`,delta:deltaTag(r.taux_consentement,prevCamp?rp.taux_consentement:null,{unit:" pts"}),spark:sparkline(serie("taux_consentement"),stCol(st))});
+  [st,pill]=stConsent(r.taux_consentement);
+  K.push({lbl:"Recontacts acceptés",sig:"leads générés",n:r.taux_consentement==null?"—":Math.round(r.taux_consentement),u:"%",st,pill,ctx:`${r.consentements||0} leads sur ${r.reponses||0} réponses`,delta:deltaTag(r.taux_consentement,prevCamp?rp.taux_consentement:null,{unit:" pts"}),spark:sparkline(serie("taux_consentement"),stCol(st))});
   K.push({lbl:"Suivi réseaux sociaux",sig:"notoriété",n:rsRow.taux_suivi==null?"—":Math.round(rsRow.taux_suivi),u:"%",st:"brand",pill:"Notoriété",ctx:`${rsRow.suit||0} / ${rsRow.repondu||0} répondants`,delta:deltaTag(rsRow.taux_suivi,prevCamp?rsPrev.taux_suivi:null,{unit:" pts"}),spark:sparkline(D.campagnes.map(c=>{const x=D.rs.find(y=>y.campagne===c);return x?x.taux_suivi:null;}),cssv("--mauve"))});
   $("#kpis").innerHTML=K.map(tile).join("");
 }
@@ -673,37 +739,47 @@ function renderSinistre(){
 function renderBD(){
   const r=rowFor(camp), s=sinRowFor(camp)||{};
   let rows=[], hdr="Réseau", sub="";
-  const norm2=x=>({name:x.name,sub:x.sub,n:x.n,score:x.score,csat:x.csat,csatSin:x.csatSin,nSin:x.nSin,delai:x.delai,taux:x.taux});
+  // `nNps` = nombre de NOTES NPS de la ligne, distinct du nombre de réponses : un
+  // tiers des réponses n'en contient aucune. C'est lui qui décide du marqueur
+  // « échantillon faible », sans quoi une agence à 12 réponses dont 7 notées
+  // affichait un NPS de +85,7 sans le moindre avertissement.
+  const norm2=x=>({name:x.name,sub:x.sub,n:x.n,nNps:x.nNps,score:x.score,csat:x.csat,csatSin:x.csatSin,nSin:x.nSin,delai:x.delai,taux:x.taux});
   if(granLevel==="global"){ hdr="Réseau"; sub="Vue d'ensemble du réseau";
-    rows=[norm2({name:"Réseau ANSET",n:r.reponses,score:r.score_nps,csat:r.csat_global,csatSin:s.csat_sinistre,nSin:s.reponses,delai:s.delai_reel,taux:r.taux_reponse})]; }
+    rows=[norm2({name:"Réseau ANSET",n:r.reponses,nNps:r.nps_rep,score:r.score_nps,csat:r.csat_global,csatSin:s.csat_sinistre,nSin:s.reponses,delai:s.delai_reel,taux:r.taux_reponse})]; }
   else if(granLevel==="zone"){ hdr="Zone"; const z=D.zones.filter(x=>x.campagne===camp&&x.zone); sub=`${z.length} zone(s)`;
-    rows=z.map(x=>norm2({name:x.zone,n:x.reponses,score:x.score_nps,csat:x.csat_global,csatSin:x.csat_sinistre,nSin:x.n_sinistre,delai:x.delai_reel,taux:x.taux_reponse})); }
+    rows=z.map(x=>norm2({name:x.zone,n:x.reponses,nNps:x.nps_rep,score:x.score_nps,csat:x.csat_global,csatSin:x.csat_sinistre,nSin:x.n_sinistre,delai:x.delai_reel,taux:x.taux_reponse})); }
   else if(granLevel==="agence"){ hdr="Agence"; const a=D.agences.filter(x=>x.campagne===camp); sub=`${a.length} agence(s) · triées par score`;
     // `score_nps` est l'alias aligné sur les autres vues ; `nps_score` reste lu en
-    // repli si la migration d'alignement n'est pas encore appliquée.
-    rows=a.map(x=>norm2({name:x.agence,n:x.reponses,score:x.score_nps??x.nps_score,csat:x.csat_global,csatSin:x.csat_sinistre,nSin:x.n_sinistre,delai:x.delai_reel,taux:D.tauxKey[camp+"|"+x.agence]})); }
+    // repli si la migration d'alignement n'est pas encore appliquée. Idem `nps_rep`,
+    // ajouté à la vue agence par 20260729190000 : à défaut on le recompose depuis
+    // les trois segments, qui totalisent exactement les réponses notées.
+    rows=a.map(x=>norm2({name:x.agence,n:x.reponses,nNps:x.nps_rep??((x.promoteurs||0)+(x.passifs||0)+(x.detracteurs||0)),score:x.score_nps??x.nps_score,csat:x.csat_global,csatSin:x.csat_sinistre,nSin:x.n_sinistre,delai:x.delai_reel,taux:D.tauxKey[camp+"|"+x.agence]})); }
   else { hdr="Conseiller"; const c=D.conseillers.filter(x=>x.campagne===camp); sub=`${c.length} conseiller(s)`;
     // Pas d'agence en sous-titre : `conseillers.agence` est déduite de l'import et
     // ne vaut que pour la première ligne rencontrée, alors qu'un conseiller peut
     // travailler pour plusieurs agences (ou pour l'équipe Commerciaux). L'afficher
     // laissait croire à un rattachement fiable.
-    rows=c.map(x=>norm2({name:x.conseiller_nom||x.conseiller_id,n:x.reponses,score:x.score_nps,csat:x.csat_global,csatSin:x.csat_sinistre,nSin:x.n_sinistre,delai:x.delai_reel,taux:x.taux_reponse})); }
+    rows=c.map(x=>norm2({name:x.conseiller_nom||x.conseiller_id,n:x.reponses,nNps:x.nps_rep,score:x.score_nps,csat:x.csat_global,csatSin:x.csat_sinistre,nSin:x.n_sinistre,delai:x.delai_reel,taux:x.taux_reponse})); }
   rows.sort((a,b)=>(b.score??-999)-(a.score??-999));
   $("#gran-sub").textContent=`Campagne ${camp} · ${sub}`;
   // « Réponses » compte les réponses rattachées à l'agence DÉCLARÉE par le client ;
   // « Taux rép. » rapporte les réponses aux invitations de l'agence du FICHIER, des
   // deux côtés du ratio. Les deux nombres peuvent donc différer pour une agence :
   // c'est voulu, un pourcentage doit comparer la même population.
-  const head=`<thead><tr><th>${hdr}</th><th>Réponses</th>`
-    + `<th data-tip="Score NPS = % promoteurs − % détracteurs.<br>« * » signale un échantillon de moins de ${MIN_FIABLE} réponses.">Score NPS</th>`
+  const head=`<thead><tr><th>${hdr}</th>`
+    + `<th data-tip="Nombre de réponses reçues, et entre parenthèses celles qui contiennent une note NPS.<br>Un client déclarant n'avoir eu aucun contact récent n'est interrogé sur rien : sa réponse compte ici, mais pas dans les notes.">Réponses</th>`
+    + `<th data-tip="Score NPS = % promoteurs − % détracteurs, calculé sur les seules réponses NOTÉES.<br>« * » signale moins de ${MIN_FIABLE} notes NPS.">Score NPS</th>`
     + `<th>Satisfaction</th>`
     + `<th data-tip="Gestion du sinistre notée /5 par les clients réellement indemnisés (invités depuis la liste des sinistres clos).<br>« — » = ce périmètre n'a traité aucun sinistre : un gestionnaire de quittances n'a pas de note sinistre.">Sat. sinistre</th>`
     + `<th data-tip="Délai MOYEN entre ouverture et clôture des sinistres du périmètre. Sensible aux dossiers anciens : voir la médiane dans la carte « Gestion des sinistres » pour le délai du dossier typique.">Délai réel</th>`
     + `<th data-tip="Réponses rapportées aux invitations envoyées, sur l'agence d'origine de l'envoi.">Taux rép.</th></tr></thead>`;
   const body=rows.length? rows.map(x=>{
     const nm=x.sub?`${esc(x.name)} <span class="agc">${esc(x.sub)}</span>`:esc(x.name);
-    return `<tr><td>${nm}</td><td class="num">${x.n??0}</td>
-      <td><span class="cchip" style="background:color-mix(in srgb,${scoreColor(x.score)} 16%,transparent);color:${scoreColor(x.score)}"${(x.n??0)<MIN_FIABLE?` data-tip="Échantillon faible : ${x.n??0} réponse(s). Score à lire avec prudence."`:""}>${x.score==null?"—":(x.score>0?"+":"")+x.score}${(x.n??0)>0&&(x.n??0)<MIN_FIABLE?" *":""}</span></td>
+    // Le « * » et son avertissement portent sur `nNps`, et ne s'affichent que si un
+    // score existe : « — * » n'avait aucun sens (rien à lire avec prudence).
+    const nn=x.nNps??x.n??0, faible=nn>0&&nn<MIN_FIABLE;
+    return `<tr><td>${nm}</td><td class="num">${x.n??0}${(x.n??0)>nn?` <span class="agc">(${nn?`${nn} notée${nn>1?"s":""}`:"aucune notée"})</span>`:""}</td>
+      <td><span class="cchip" style="background:color-mix(in srgb,${scoreColor(x.score)} 16%,transparent);color:${scoreColor(x.score)}"${x.score!=null&&faible?` data-tip="Échantillon faible : ${nn} note${nn>1?"s":""} NPS sur ${x.n??0} réponse(s). Score à lire avec prudence."`:""}>${x.score==null?"—":(x.score>0?"+":"")+x.score}${x.score!=null&&faible?" *":""}</span></td>
       <td class="num" style="color:${csatColor(x.csat)}">${fmt(x.csat,1)}</td>
       <td class="num" style="color:${csatColor(x.csatSin)}"${x.csatSin!=null?` data-tip="Sur ${x.nSin??0} réponse(s) de clients indemnisés."`:""}>${fmt(x.csatSin,1)}</td>
       <td class="num" style="color:${delaiColor(x.delai)}">${x.delai==null?"—":Math.round(x.delai)+" j"}</td>
@@ -744,13 +820,15 @@ function renderTrend(){
 }
 
 function renderAgences(){
-  const ag=D.agences.filter(x=>x.campagne===camp).map(x=>({a:x.agence,v:x.score_nps??x.nps_score,n:x.reponses}))
+  // `n` = notes NPS (base réelle du score affiché), pas le total des réponses.
+  const ag=D.agences.filter(x=>x.campagne===camp).map(x=>({a:x.agence,v:x.score_nps??x.nps_score,
+      n:x.nps_rep??((x.promoteurs||0)+(x.passifs||0)+(x.detracteurs||0))}))
     .filter(x=>x.v!=null).sort((a,b)=>b.v-a.v);
   $("#bars-sub").textContent=`Campagne ${camp} · score NPS`;
   if(!ag.length){ $("#bars").innerHTML='<div class="empty">Aucune donnée agence.</div>'; return; }
   $("#bars").innerHTML=ag.map(d=>{ const posPct=(d.v+100)/2, left=Math.min(50,posPct), width=Math.abs(posPct-50);
     const verd=d.v<0?"à redresser":d.v<CIBLE_NPS?"correct":"bon";
-    return `<div class="bar" data-tip="<b>${esc(d.a)}</b><br>Score NPS ${d.v>0?'+':''}${d.v} · ${verd}<br>${d.n} réponses">
+    return `<div class="bar" data-tip="<b>${esc(d.a)}</b><br>Score NPS ${d.v>0?'+':''}${d.v} · ${verd}<br>Sur ${d.n} note${d.n>1?'s':''} NPS${d.n<MIN_FIABLE?' — échantillon faible':''}">
       <span>${esc(d.a)}</span>
       <div class="track"><div class="zero" style="left:50%"></div><div class="fill" style="left:${left}%;width:${width}%;background:${scoreColor(d.v)}"></div></div>
       <span class="val num" style="color:${scoreColor(d.v)}">${d.v>0?'+':''}${d.v}</span></div>`;
@@ -830,6 +908,148 @@ function renderLeads(){
   document.querySelectorAll(".lead-st").forEach(s=>s.addEventListener("change",onStatut));
   document.querySelectorAll(".lead-pec").forEach(s=>s.addEventListener("change",onPriseEnCharge));
   document.querySelectorAll(".lead-note").forEach(b=>b.addEventListener("click",onNote));
+  renderPilotage();
+}
+
+// ============================ PROSPECTION · PILOTAGE ============================
+// Écran manager. Tout se calcule depuis `leads` (déjà chargé en entier pour la liste)
+// et depuis `D`, chargé à la connexion : pas de requête supplémentaire.
+//
+// Ce qui N'EST PAS mesuré, faute de donnée alimentée : le nombre de tentatives
+// d'appel, la date de prochaine relance et le produit visé existent en colonnes mais
+// aucune écran ne les écrit — un indicateur bâti dessus afficherait 0 en permanence
+// et se lirait comme « personne n'appelle ». De même « contactés » n'est pas dérivable
+// des statuts (« injoignable » est une tentative, « rappel » un contact) : l'entonnoir
+// s'arrête donc à des étapes non ambiguës.
+const P_ENCOURS = ["a_contacter","injoignable","rappel","interesse","devis"];
+const P_ENGAGE  = ["interesse","devis","souscrit"];   // le client a manifesté un intérêt
+const P_CLOS    = ["souscrit","sans_suite","ne_pas_contacter"]; // issue connue
+const median=a=>{ if(!a.length) return null; const s=[...a].sort((x,y)=>x-y), m=s.length>>1;
+  return s.length%2 ? s[m] : (s[m-1]+s[m])/2; };
+const joursDepuis=d=> d==null?null:Math.floor((Date.now()-new Date(d).getTime())/86400000);
+
+$("#pseg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return;
+  document.querySelectorAll("#pseg button").forEach(x=>x.classList.remove("on")); b.classList.add("on");
+  const pil=b.dataset.pview==="pilotage";
+  $("#pv-liste").style.display=pil?"none":"";
+  $("#pv-pilotage").style.display=pil?"":"none";
+  if(pil) renderPilotage();
+});
+
+function renderPilotage(){
+  if($("#pv-pilotage").style.display==="none") return;   // écran masqué : rien à peindre
+  const n=leads.length, by={}; leads.forEach(l=>by[l.statut]=(by[l.statut]||0)+1);
+  const cnt=ks=>ks.reduce((s,k)=>s+(by[k]||0),0);
+  const pris=leads.filter(l=>l.traite_par), orph=leads.filter(l=>!l.traite_par);
+  const souscrits=by.souscrit||0, clos=cnt(P_CLOS), engages=cnt(P_ENGAGE);
+  // Réponses toutes campagnes confondues : l'écran n'est pas filtré par campagne,
+  // le dénominateur doit couvrir le même périmètre que les leads listés.
+  const totRep=(D.reseau||[]).reduce((s,x)=>s+(x.reponses||0),0);
+  const captation = totRep? 100*n/totRep : null;
+  const pctPris   = n? 100*pris.length/n : null;
+  const tauxSous  = clos? 100*souscrits/clos : null;
+  const vieuxOrph = orph.length? Math.max(...orph.map(l=>joursDepuis(l.created_at)??0)) : null;
+  const delaiPec  = median(pris.filter(l=>l.date_prise_en_charge&&l.created_at)
+    .map(l=>Math.max(0,(new Date(l.date_prise_en_charge)-new Date(l.created_at))/86400000)));
+
+  const K=[];
+  K.push({lbl:"Leads captés",sig:"consentements au recontact",n,u:"",st:"brand",pill:"Total",
+    ctx:captation==null?"&nbsp;":`<span data-tip="Part des réponses au sondage dont le client a accepté d'être recontacté. C'est le robinet d'entrée de la prospection.">${Math.round(captation)} % des ${totRep} réponses</span>`,delta:""});
+  let [st,pill]=[pctPris==null?"flat":pctPris>=90?"good":pctPris>=50?"warn":"bad",
+    pctPris==null?"—":pctPris>=90?"Sous contrôle":pctPris>=50?"À compléter":"File d'attente"];
+  K.push({lbl:"Pris en charge",sig:"attribués à un conseiller",n:pctPris==null?"—":Math.round(pctPris),u:"%",st,pill,
+    ctx:`${pris.length} sur ${n} lead${n>1?"s":""}`,delta:""});
+  // Le taux de souscription se calcule sur les leads dont l'ISSUE EST CONNUE : le
+  // rapporter au total ferait chuter le taux à chaque nouveau lead entrant, alors
+  // qu'un lead encore en cours n'est ni gagné ni perdu.
+  [st,pill]=[tauxSous==null?"flat":tauxSous>=30?"good":tauxSous>=15?"warn":"bad",
+    tauxSous==null?"Aucune issue":tauxSous>=30?"Bon":tauxSous>=15?"Moyen":"Faible"];
+  K.push({lbl:"Taux de souscription",sig:"sur issues connues",n:tauxSous==null?"—":Math.round(tauxSous),u:"%",st,pill,
+    ctx:clos?`<span data-tip="Souscrits rapportés aux leads dont l'issue est tranchée (souscrit, sans suite, ne pas contacter). Les leads en cours sont exclus des deux termes.">${souscrits} souscrit${souscrits>1?"s":""} sur ${clos} issue${clos>1?"s":""}</span>`
+      :`<span data-tip="Aucun lead n'a encore d'issue tranchée : le taux est indéfini, pas nul.">aucun lead clos</span>`,delta:""});
+  [st,pill]=[orph.length?"bad":"good",orph.length?"À attribuer":"Tout attribué"];
+  K.push({lbl:"Non attribués",sig:"personne ne les traite",n:orph.length,u:"",st,pill,
+    ctx:vieuxOrph==null?"file vide":`<span data-tip="Ancienneté du plus vieux lead que personne n'a pris en charge, depuis sa création.">le plus ancien attend ${vieuxOrph} j</span>`,delta:""});
+  K.push({lbl:"Délai de prise en charge",sig:"médiane",n:delaiPec==null?"—":Math.round(delaiPec),u:"j",
+    st:delaiPec==null?"flat":delaiPec<=2?"good":delaiPec<=7?"warn":"bad",
+    pill:delaiPec==null?"—":delaiPec<=2?"Réactif":delaiPec<=7?"À surveiller":"Trop lent",
+    ctx:delaiPec==null?"aucun lead attribué":`sur ${pris.length} lead${pris.length>1?"s":""} attribué${pris.length>1?"s":""}`,delta:""});
+  $("#pp-kpis").innerHTML=K.map(tile).join("");
+
+  // --- Entonnoir --------------------------------------------------------------
+  const et=[
+    {l:"Réponses",v:totRep,tip:"Réponses au sondage, toutes campagnes confondues."},
+    {l:"Leads",v:n,tip:"Réponses dont le client a accepté d'être recontacté."},
+    {l:"Pris en charge",v:pris.length,tip:"Leads attribués à un conseiller."},
+    {l:"Engagés",v:engages,tip:"Leads au statut Intéressé, Devis ou Souscrit — le client a manifesté un intérêt."},
+    {l:"Souscrits",v:souscrits,tip:"Leads convertis en contrat."},
+  ];
+  const base=et[0].v||1;
+  $("#pp-funnel-sub").textContent=`De la réponse au contrat · ${n} lead${n>1?"s":""} en base`;
+  $("#pp-funnel").innerHTML=et.map((e,i)=>{
+    const prev=i>0?et[i-1].v:null, taux=prev?Math.round(100*e.v/prev):null;
+    const col=i===et.length-1?cssv("--good"):cssv("--blue");
+    return `<div class="bar" data-tip="<b>${e.l}</b><br>${e.tip}${taux!=null?`<br>${taux} % de l'étape précédente`:""}">
+      <span>${e.l}</span>
+      <div class="track"><div class="fill" style="left:0;width:${Math.max(e.v?1.5:0,100*e.v/base)}%;background:${col}"></div></div>
+      <span class="val num" style="color:${col}">${e.v}${taux!=null?` <span class="agc">${taux}%</span>`:""}</span></div>`;
+  }).join("");
+  const perdus=n-pris.length;
+  $("#pp-funnel-foot").innerHTML= n===0 ? "Aucun lead pour l'instant."
+    : `<b>Où ça bloque</b> — ${perdus>0?`<b>${perdus}</b> lead${perdus>1?"s":""} capté${perdus>1?"s":""} n'${perdus>1?"ont":"a"} encore aucun conseiller`
+        :"tous les leads sont attribués"}. `
+      + (clos? `Sur les ${clos} leads tranchés, ${souscrits} ${souscrits>1?"ont souscrit":"a souscrit"}.`
+             : "Aucun n'a encore d'issue : le taux de souscription reste indéfini.");
+
+  // --- Portefeuilles par conseiller ------------------------------------------
+  const parCons={};
+  leads.forEach(l=>{ const k=l.traite_par||"__none"; (parCons[k]=parCons[k]||[]).push(l); });
+  const lignes=Object.entries(parCons).map(([k,ls])=>{
+    const b={}; ls.forEach(l=>b[l.statut]=(b[l.statut]||0)+1);
+    const c=ks=>ks.reduce((s,x)=>s+(b[x]||0),0);
+    const cl=c(P_CLOS), so=b.souscrit||0;
+    return {k,nom:k==="__none"?"— Non attribués —":consLabel(k),n:ls.length,
+      encours:c(P_ENCOURS),nouveaux:b.nouveau||0,souscrits:so,clos:cl,
+      taux:cl?100*so/cl:null};
+  }).sort((a,b)=> a.k==="__none"?-1 : b.k==="__none"?1 : b.n-a.n);
+  $("#pp-porte").innerHTML=`<thead><tr><th>Conseiller</th><th>Leads</th>`
+    +`<th data-tip="Statut Nouveau : le lead n'a pas encore été travaillé.">Nouveaux</th>`
+    +`<th data-tip="À contacter, Injoignable, Rappel, Intéressé, Devis.">En cours</th>`
+    +`<th>Souscrits</th>`
+    +`<th data-tip="Souscrits rapportés aux seuls leads dont l'issue est tranchée.">Taux</th></tr></thead><tbody>`
+    +(lignes.length?lignes.map(x=>`<tr${x.k==="__none"?' style="color:var(--muted)"':""}>
+        <td>${esc(x.nom)}</td><td class="num">${x.n}</td><td class="num">${x.nouveaux}</td>
+        <td class="num">${x.encours}</td><td class="num" style="color:${x.souscrits?"var(--good)":"inherit"}">${x.souscrits}</td>
+        <td class="num" style="color:${x.taux==null?"var(--faint)":x.taux>=30?"var(--good)":x.taux>=15?"var(--warn)":"var(--bad)"}">${x.taux==null?"—":Math.round(x.taux)+" %"}</td></tr>`).join("")
+      :`<tr><td colspan="6" class="empty">Aucun lead.</td></tr>`)+`</tbody>`;
+
+  // --- Répartition par statut -------------------------------------------------
+  const maxSt=Math.max(1,...STATUTS.map(s=>by[s]||0));
+  $("#pp-statuts").innerHTML=STATUTS.filter(s=>by[s]).map(s=>{
+    const v=by[s], col=cssv(s==="souscrit"?"--good":["sans_suite","ne_pas_contacter"].includes(s)?"--bad":s==="nouveau"?"--warn":"--ciel");
+    return `<div class="bar" data-tip="<b>${STATUT_LABELS[s]}</b><br>${v} lead${v>1?"s":""} · ${Math.round(100*v/n)} % du stock">
+      <span>${STATUT_LABELS[s]}</span>
+      <div class="track"><div class="fill" style="left:0;width:${100*v/maxSt}%;background:${col}"></div></div>
+      <span class="val num" style="color:${col}">${v}</span></div>`;
+  }).join("")||'<div class="empty">Aucun lead.</div>';
+
+  // --- Origine des leads ------------------------------------------------------
+  // Réponses par agence : somme sur les campagnes, depuis la vue du dashboard.
+  const repAg={}; (D.agences||[]).forEach(a=>{ if(a.agence) repAg[a.agence]=(repAg[a.agence]||0)+(a.reponses||0); });
+  const leadAg={}; leads.forEach(l=>{ const a=l.agence||"—"; leadAg[a]=(leadAg[a]||0)+1; });
+  const ags=[...new Set([...Object.keys(leadAg),...Object.keys(repAg)])]
+    .map(a=>({a,leads:leadAg[a]||0,rep:repAg[a]||0,taux:repAg[a]?100*(leadAg[a]||0)/repAg[a]:null}))
+    .filter(x=>x.leads||x.rep).sort((x,y)=>y.leads-x.leads||y.rep-x.rep);
+  $("#pp-origine").innerHTML=`<thead><tr><th>Agence</th><th>Leads</th>`
+    +`<th data-tip="Réponses au sondage rattachées à cette agence (agence déclarée par le client, à défaut celle de l'invitation).">Réponses</th>`
+    +`<th data-tip="Part des réponses de l'agence qui ont donné un lead. Mesure la capacité à obtenir un accord de recontact, pas la qualité du lead.">Captation</th></tr></thead><tbody>`
+    // Même prudence que pour le NPS : une captation de 0 % sur 2 réponses n'est pas
+    // une contre-performance d'agence, c'est un échantillon vide. En dessous de
+    // MIN_FIABLE réponses la valeur reste affichée, mais en neutre et signalée.
+    +(ags.length?ags.map(x=>{ const sur=x.rep>=MIN_FIABLE;
+      return `<tr><td>${esc(x.a)}</td><td class="num">${x.leads}</td><td class="num">${x.rep}</td>
+        <td class="num" style="color:${x.taux==null?"var(--faint)":sur?consentColor(x.taux):"var(--muted)"}"${!sur&&x.taux!=null?` data-tip="Seulement ${x.rep} réponse(s) : trop peu pour juger la captation de cette agence."`:""}>${x.taux==null?"—":Math.round(x.taux)+" %"}${!sur&&x.taux!=null?" *":""}</td></tr>`;}).join("")
+      :`<tr><td colspan="4" class="empty">Aucune donnée.</td></tr>`)+`</tbody>`;
 }
 // Attribution d'un lead. La date n'est posée qu'à la prise en charge et repart à
 // null si on désattribue : elle doit toujours décrire l'état affiché.
