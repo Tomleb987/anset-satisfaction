@@ -27,10 +27,17 @@
 // que si le passage a envoyé au moins un e-mail : une ligne durablement en échec
 // ne peut donc pas entretenir une boucle.
 //
+// CE QUE LA CHAÎNE NE COUVRE PAS : si Supabase tue le worker (HTTP 546), la
+// relance n'est jamais émise et la diffusion s'arrête sans bruit. C'est arrivé en
+// production le 29/07/2026 avec des lots de 500. D'où deux parades : des lots
+// plus petits (LOT_DEFAUT), et la reprise déclenchée par le dashboard quand le
+// compteur ne bouge plus. Cette reprise pouvant chevaucher un passage encore
+// vivant, chaque ligne est RÉSERVÉE avant envoi (voir la boucle d'envoi).
+//
 // Modes (query string) :
 //   (défaut)          envoie le lot 'a_envoyer' de la campagne courante
 //   ?campagne=YYYY-MM cible une campagne précise
-//   ?limit=N          plafonne le lot par passage (défaut 500)
+//   ?limit=N          plafonne le lot par passage (défaut 150, max 500)
 //   ?dry=1            simule : ne contacte pas Brevo, ne modifie rien
 //   ?test=a@b.pf      TEST : envoie 1 invitation à cette adresse, ne modifie rien
 //   ?chaine=N         usage interne : rang du passage dans la relance automatique
@@ -61,8 +68,14 @@ const CORS = {
 // Fenêtre d'exécution d'une Edge Function : 150 s (plan Supabase free), 400 s en payant.
 // On s'arrête à 110 s pour laisser le temps de relancer la suite et de répondre.
 const BUDGET_MS = 110_000;
-// Garde-fou anti-boucle : au pire 20 passages enchaînés (20 × ~500 envois).
-const CHAINE_MAX = 20;
+// Garde-fou anti-boucle. Relevé de 20 à 80 en même temps que la taille d'un
+// passage passait de 500 à 150 : il faut ~22 passages pour un lot de 3200.
+const CHAINE_MAX = 80;
+// Taille d'un passage. 500 faisait tuer le worker par Supabase (HTTP 546,
+// dépassement CPU/mémoire) au bout de 3 ou 4 passages, et la chaîne mourait avec
+// lui. 150 laisse une large marge ; il y a juste plus de passages.
+const LOT_DEFAUT = 150;
+const LOT_MAX = 500;
 
 const json = (obj: unknown, status = 200) =>
   new Response(JSON.stringify(obj, null, 2), { status, headers: { ...CORS, "Content-Type": "application/json" } });
@@ -101,7 +114,7 @@ Deno.serve(async (req: Request) => {
   const url = new URL(req.url);
   const dry = url.searchParams.get("dry") === "1";
   const testEmail = url.searchParams.get("test");
-  const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "500", 10) || 500, 2000);
+  const limit = Math.min(parseInt(url.searchParams.get("limit") ?? String(LOT_DEFAUT), 10) || LOT_DEFAUT, LOT_MAX);
   // Rang du passage courant dans la chaîne de relances automatiques (0 = appel du manager).
   const chaine = Math.max(parseInt(url.searchParams.get("chaine") ?? "0", 10) || 0, 0);
 
@@ -259,17 +272,31 @@ Deno.serve(async (req: Request) => {
         if (i >= lot.length) return;
         const row = lot[i];
         const lien = lienPersonnalise(formUrl, row);
+
+        // RÉSERVATION AVANT ENVOI. On bascule la ligne en 'envoye' d'abord, avec la
+        // condition `statut_envoi='a_envoyer'` : si un autre passage l'a déjà prise,
+        // rien n'est mis à jour et on la saute. C'est ce qui rend inoffensive une
+        // reprise déclenchée pendant qu'un passage de fond tourne encore — sans
+        // cela, deux passages liraient la même ligne et le client recevrait deux
+        // invitations, donc pourrait répondre deux fois.
+        const { data: pris, error: ePris } = await supabase
+          .from("envois_sondage")
+          .update({ statut_envoi: "envoye", date_envoi: new Date().toISOString() })
+          .eq("id", row.id).eq("statut_envoi", "a_envoyer")
+          .select("id");
+        if (ePris) { erreurs.push({ id: row.id, email: row.email, erreur: ePris.message }); continue; }
+        if (!pris || pris.length === 0) continue; // déjà traitée par un autre passage
+
         try {
           await envoyer(row.email!, lien);
         } catch (e) {
+          // Échec d'envoi : la ligne doit redevenir envoyable, sinon le client est
+          // compté comme sollicité sans avoir rien reçu.
+          await supabase.from("envois_sondage")
+            .update({ statut_envoi: "a_envoyer", date_envoi: null }).eq("id", row.id);
           erreurs.push({ id: row.id, email: row.email, erreur: e instanceof Error ? e.message : String(e) });
           continue;
         }
-        const { error: eUp } = await supabase
-          .from("envois_sondage")
-          .update({ statut_envoi: "envoye", date_envoi: new Date().toISOString() })
-          .eq("id", row.id);
-        if (eUp) { erreurs.push({ id: row.id, email: row.email, erreur: eUp.message }); continue; }
         envoyes++;
       }
     };

@@ -318,7 +318,7 @@
         <div class="adminrow"><label class="fld">Campagne <input type="month" id="r-campagne"></label></div>
         <label class="drop"><span class="ic">⬆︎</span><b>Choisir le fichier .xlsx / .csv</b><br>requête générale
           <input type="file" id="r-file" accept=".xlsx,.xls,.csv"></label>
-        <p class="sub" style="margin:12px 0 0">Dédoublonnage e-mail · exclusions (résilié non-paiement, e-mail manquant, invitation de moins d'un mois) · mapping agences · conseillers depuis « Gestionnaire ».</p>
+        <p class="sub" style="margin:12px 0 0">Dédoublonnage e-mail · cellule « a@x/b@y » → première adresse · exclusions (résilié non-paiement, e-mail manquant ou invalide, invitation de moins d'un mois) · mapping agences · conseillers depuis « Gestionnaire ».</p>
         <div id="r-notice"></div><div id="r-report"></div>
       </div>
       <div class="card pad" style="border-left:4px solid var(--mauve)">
@@ -396,6 +396,10 @@ const MOIS=["janv.","févr.","mars","avr.","mai","juin","juil.","août","sept.",
 // Délai minimum entre deux invitations au même client (anti-sollicitation).
 // Appliqué à l'import : une ligne trop récente est marquée 'exclu', jamais envoyée.
 const DELAI_SOLLICITATION_MOIS=1;
+// Validation d'adresse à l'import. Volontairement stricte sur la forme (un seul @,
+// un domaine avec extension) : elle ne peut évidemment pas rattraper une faute de
+// frappe dans le domaine, du type « gmail.cm ».
+const RE_EMAIL=/^[^@\s;,\/]+@[^@\s;,\/]+\.[a-z]{2,}$/i;
 
 // Objectif de score NPS du réseau. SOURCE UNIQUE : repère de la jauge, libellés,
 // ligne pointillée du graphe, seuils de couleur et verdicts en dépendent tous.
@@ -789,16 +793,25 @@ async function importFichier(buf,source){
   if(aoa.length<2) throw new Error("Fichier vide.");
   const idx=mapReqHeaders(aoa[0]); if(idx.email==null) throw new Error("Colonne e-mail introuvable.");
   const seen=new Set(),rows=[],cons={};
-  const stx={total:0,a_envoyer:0,exclu_resilie:0,exclu_email:0,exclu_recent:0,doublons:0,autre:0,conseillers:0};
+  const stx={total:0,a_envoyer:0,exclu_resilie:0,exclu_email:0,exclu_invalide:0,exclu_recent:0,doublons:0,autre:0,conseillers:0};
   for(let r=1;r<aoa.length;r++){ const row=aoa[r]; stx.total++;
     const g=k=> idx[k]!=null?fixMojibake(String(row[idx[k]]??"").trim()):"";
-    const email=g("email").toLowerCase();
+    // Le fichier source contient des cellules à DEUX adresses collées (« a@x/b@y »)
+    // et des adresses tronquées sans domaine. Brevo les refuse, et la ligne restait
+    // alors bloquée en 'a_envoyer' jusqu'à la fin de la diffusion. On garde donc la
+    // première adresse valide de la cellule, et on exclut à l'import ce qui ne
+    // ressemble pas à une adresse — visible dans le rapport, plutôt que subi.
+    const brutEmail=g("email").toLowerCase().replace(/\s+/g,"");
+    const email=brutEmail.split(/[\/;,]+/).filter(Boolean).find(c=>RE_EMAIL.test(c))||"";
+    const emailInvalide=!!brutEmail && !email;
     let ag;
     if(isSin){ ag={nom:null,zone:null,active:true}; }
     else { const code=String(g("agence")).replace(/[^0-9]/g,""); ag=agencesMap[code]||{nom:"Autre",zone:"(non précisée)",active:true}; if(ag.nom==="Autre")stx.autre++; }
     let statut_envoi="a_envoyer",motif_ex=null;
     if(!isSin){ const nt=norm(g("typq")); if(nt.includes("resilie")&&nt.includes("non paiement")){ statut_envoi="exclu"; motif_ex="résilié non paiement"; stx.exclu_resilie++; } }
-    if(!email && statut_envoi==="a_envoyer"){ statut_envoi="exclu"; motif_ex="pas d'email"; stx.exclu_email++; }
+    if(!email && statut_envoi==="a_envoyer"){ statut_envoi="exclu";
+      if(emailInvalide){ motif_ex=`adresse e-mail invalide : ${brutEmail.slice(0,80)}`; stx.exclu_invalide++; }
+      else { motif_ex="pas d'email"; stx.exclu_email++; } }
     if(email){ if(seen.has(email)){ stx.doublons++; continue; } seen.add(email); }
     let conseiller_id=null; const gslug=slugConseiller(g("gestionnaire")||(isSin?g("gestionnaire_corp"):""));
     if(gslug && ag.active!==false){ conseiller_id=gslug; if(!cons[gslug]) cons[gslug]= ag.nom?{id:gslug,nom:nomFromSlug(gslug),agence:ag.nom}:{id:gslug,nom:nomFromSlug(gslug)}; }
@@ -856,7 +869,7 @@ function bindImport(fileSel,source,noticeSel,reportSel){
       $(reportSel).innerHTML=`<div class="mini-kpis">
         <div class="mk"><div class="n num">${st.total}</div><div class="l">Lignes fichier</div></div>
         <div class="mk"><div class="n num">${st.a_envoyer}</div><div class="l">À envoyer</div></div>
-        <div class="mk"><div class="n num">${st.exclu_resilie+st.exclu_email+st.exclu_recent}</div><div class="l">Exclus (${st.exclu_resilie} résiliés · ${st.exclu_email} sans e-mail · ${st.exclu_recent} sollicités &lt; ${DELAI_SOLLICITATION_MOIS} mois)</div></div>
+        <div class="mk"><div class="n num">${st.exclu_resilie+st.exclu_email+st.exclu_invalide+st.exclu_recent}</div><div class="l">Exclus (${st.exclu_resilie} résiliés · ${st.exclu_email} sans e-mail · ${st.exclu_invalide} adresse invalide · ${st.exclu_recent} sollicités &lt; ${DELAI_SOLLICITATION_MOIS} mois)</div></div>
         <div class="mk"><div class="n num">${st.doublons}</div><div class="l">Doublons${st.autre?` · ${st.autre} « Autre »`:""}</div></div></div>`;
     }catch(err){ notice("Import échoué : "+err.message,"err"); } e.target.value=""; };
     rd.readAsArrayBuffer(f);
@@ -886,18 +899,28 @@ async function majProgression(camp){
       reste?` · <span class="num">${reste}</span> en attente` : " · lot terminé"}</p>`;
   return {reste,total};
 }
-// Suit l'avancement pendant que les passages de fond s'enchaînent.
+// Suit l'avancement pendant que les passages de fond s'enchaînent, et REPREND la
+// diffusion si elle s'arrête. Nécessaire parce qu'un worker tué par Supabase
+// (HTTP 546) n'émet pas sa relance : sans ce rattrapage, le lot reste à moitié
+// envoyé. Sans danger de double envoi : la fonction réserve chaque ligne avant
+// de l'envoyer.
+const SONDAGE_MS=10000, STAGNE_MAX=12, REPRISES_MAX=5; // 12 × 10 s = 2 min sans progression
 function suivreProgression(camp){
   clearInterval(progTimer);
-  let dernier=-1, stagne=0;
+  let dernier=-1, stagne=0, reprises=0;
   progTimer=setInterval(async()=>{
     let r; try{ r=await majProgression(camp); }catch{ return; }
-    if(!r.total || r.reste===0){ clearInterval(progTimer); progTimer=null; return; }
+    if(!r.total || r.reste===0){ clearInterval(progTimer); progTimer=null;
+      $("#d-notice").innerHTML=`<div class="notice ok">✓ Diffusion terminée : ${r.total} invitation(s) envoyée(s).</div>`; return; }
     if(r.reste===dernier) stagne++; else { stagne=0; dernier=r.reste; }
-    // 3 relevés identiques (~30 s) : la chaîne de relances s'est interrompue.
-    if(stagne>=3){ clearInterval(progTimer); progTimer=null;
-      $("#d-notice").innerHTML=`<div class="notice err">Progression arrêtée : ${r.reste} invitation(s) encore en attente. Reclique « Envoi réel » — les lignes déjà envoyées ne repartent pas.</div>`; }
-  },10000);
+    if(stagne<STAGNE_MAX) return;
+    stagne=0;
+    if(reprises>=REPRISES_MAX){ clearInterval(progTimer); progTimer=null;
+      $("#d-notice").innerHTML=`<div class="notice err">Diffusion à l'arrêt : ${r.reste} invitation(s) en attente après ${REPRISES_MAX} reprises. Ce sont vraisemblablement des adresses refusées par Brevo — vérifie le fichier source.</div>`; return; }
+    reprises++;
+    $("#d-notice").innerHTML=`<div class="notice ok">Reprise automatique ${reprises}/${REPRISES_MAX} — ${r.reste} invitation(s) restantes.</div>`;
+    try{ await appelDiffusion(camp,""); }catch{ /* on continue à sonder : le fond peut avancer malgré une réponse en erreur */ }
+  },SONDAGE_MS);
 }
 
 // ====================== UTILISATEURS (super admin) ======================
@@ -999,19 +1022,25 @@ $("#u-creer").addEventListener("click",async ()=>{
   }catch(err){ uNotice(err.message,"err"); }
 });
 
-// Diffusion Brevo (appel authentifié à l'Edge Function)
+// Diffusion Brevo (appel authentifié à l'Edge Function).
+// Isolé de l'affichage pour que la reprise automatique puisse le rappeler.
+async function appelDiffusion(camp,extra){
+  const {data:{session}}=await sb.auth.getSession();
+  const res=await fetch(`${SB_URL}/functions/v1/envoi-sondage?campagne=${encodeURIComponent(camp)}${extra}`,
+    { headers:{ Authorization:`Bearer ${session.access_token}` } });
+  const j=await res.json().catch(()=>({}));
+  if(!res.ok || j.ok===false) throw new Error(j.error||`Échec de la diffusion (HTTP ${res.status}).`);
+  return j;
+}
 async function diffuser(mode){
   const camp=$("#d-campagne").value||new Date().toISOString().slice(0,7);
-  let qs=`?campagne=${encodeURIComponent(camp)}`;
+  let qs="";
   if(mode==="dry") qs+="&dry=1";
   if(mode==="test"){ const em=prompt("Adresse e-mail de test :"); if(!em)return; qs+="&test="+encodeURIComponent(em); }
   if(mode==="send" && !confirm(`Envoyer réellement les invitations de la campagne ${camp} ?`)) return;
   $("#d-notice").innerHTML=`<div class="notice ok">Traitement…</div>`; $("#d-report").innerHTML="";
   try{
-    const {data:{session}}=await sb.auth.getSession();
-    const res=await fetch(`${SB_URL}/functions/v1/envoi-sondage${qs}`,{ headers:{ Authorization:`Bearer ${session.access_token}` } });
-    const j=await res.json();
-    if(!res.ok || j.ok===false) throw new Error(j.error||"Échec de la diffusion.");
+    const j=await appelDiffusion(camp,qs);
     let msg = j.dry ? `Aperçu : ${j.aTraiter??0} invitation(s) prête(s).`
       : j.test ? `Test envoyé à ${j.to} (envoi immédiat, vérifie aussi les spams).`
       : j.suiteAutomatique ? `${j.envoyes??0} envoyée(s), ${j.echecs??0} échec(s) — le reste du lot continue automatiquement, rien à relancer.`
@@ -1020,7 +1049,14 @@ async function diffuser(mode){
     if(j.apercu&&j.apercu.length) $("#d-report").innerHTML=`<div class="sub" style="margin-top:12px">Exemple de lien : <span class="tag-mono">${esc(j.apercu[0].lien||"")}</span></div>`;
     // Le test n'écrit rien : inutile de rafraîchir un compteur inchangé.
     if(mode!=="test"){ await majProgression(camp); if(mode==="send") suivreProgression(camp); }
-  }catch(err){ $("#d-notice").innerHTML=`<div class="notice err">${esc(err.message)}</div>`; }
+  }catch(err){
+    $("#d-notice").innerHTML=`<div class="notice err">${esc(err.message)} — vérification de l'état réel en cours…</div>`;
+    // Une requête en erreur ne veut PAS dire que rien n'est parti : le worker a pu
+    // être tué après avoir envoyé son lot, et la chaîne de fond continuer. On garde
+    // donc le compteur vivant (et la reprise avec lui) au lieu de figer l'écran sur
+    // un échec — c'est ce qui a fait croire à une panne le 29/07/2026.
+    if(mode==="send"){ majProgression(camp).catch(()=>{}); suivreProgression(camp); }
+  }
 }
 $("#d-dry").addEventListener("click",()=>diffuser("dry"));
 $("#d-test").addEventListener("click",()=>diffuser("test"));
