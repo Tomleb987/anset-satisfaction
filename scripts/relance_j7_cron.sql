@@ -18,16 +18,51 @@ create extension if not exists pg_cron;
 create extension if not exists pg_net;
 
 -- --- 2. La clé service_role dans Vault --------------------------------------
--- REMPLACER la valeur ci-dessous (Settings → API → service_role), puis exécuter.
+-- UNE SEULE LIGNE À MODIFIER : la valeur de `cle` ci-dessous (Settings → API →
+-- service_role). Un « remplacer tout » du marqueur est sans danger : les contrôles
+-- portent sur la FORME de la clé, pas sur une comparaison au marqueur — sinon
+-- remplacer partout écraserait le contrôle lui-même, qui comparerait la clé à elle
+-- même et refuserait de s'exécuter alors qu'on vient de faire ce qu'il demandait.
 -- Rejouable : la seconde exécution met le secret à jour au lieu d'en créer un autre.
 do $$
 declare
   cle text := 'COLLER_ICI_LA_CLE_SERVICE_ROLE';
   id  uuid;
+  charge text;
 begin
-  if cle = 'COLLER_ICI_LA_CLE_SERVICE_ROLE' then
-    raise exception 'Renseigne la clé service_role avant d''exécuter ce script.';
+  -- a) Marqueur encore en place = la valeur n'a pas été renseignée.
+  if cle like '%COLLER%' or length(cle) < 20 then
+    raise exception 'Renseigne la clé service_role à la place du marqueur (ligne « cle text := … »).';
   end if;
+
+  -- b) Clé publique donnée par erreur. `envoi-sondage` la refuserait, mais le cron
+  --    ne le dirait qu'à la première exécution nocturne : autant échouer ici.
+  if cle like 'sb_publishable_%' then
+    raise exception 'C''est la clé publishable (publique). Il faut « service_role » : Settings → API → service_role.';
+  end if;
+
+  -- c) Forme attendue : `sb_secret_…` (clés actuelles) ou un JWT `eyJ…` (héritées).
+  if cle not like 'sb_secret_%' and cle not like 'eyJ%' then
+    raise exception 'Forme inattendue pour une clé service_role (ni « sb_secret_… » ni « eyJ… »).';
+  end if;
+
+  -- d) JWT hérité : le rôle est dans la charge utile, et `anon` commence aussi par
+  --    « eyJ » — seul le contenu les distingue. Décodage best-effort : s'il échoue,
+  --    on laisse passer plutôt que de bloquer sur une clé peut-être valable.
+  if cle like 'eyJ%' then
+    begin
+      charge := convert_from(decode(
+        translate(split_part(cle, '.', 2), '-_', '+/')
+        || repeat('=', (4 - length(split_part(cle, '.', 2)) % 4) % 4), 'base64'), 'utf8');
+      if charge not like '%service_role%' then
+        raise exception 'Ce JWT n''est pas la clé service_role (rôle trouvé dans le jeton : %).',
+          coalesce(substring(charge from '"role"\s*:\s*"([^"]+)"'), 'illisible');
+      end if;
+    exception
+      when invalid_parameter_value or character_not_in_repertoire then null;
+    end;
+  end if;
+
   select s.id into id from vault.secrets s where s.name = 'service_role_key';
   if id is null then
     perform vault.create_secret(cle, 'service_role_key', 'Appel interne de envoi-sondage par le cron de relance');
