@@ -35,6 +35,8 @@ supabase/
     envoi-sondage/index.ts                       # envois_sondage -> SMTP Brevo (modes ?test / ?dry)
     envoi-sondage/email.ts                       # sujet + HTML de l'invitation (source de vérité)
     admin-utilisateurs/index.ts                  # comptes d'accès (super admin only) : créer/rôle/rattachement/désactiver
+    mot-de-passe-oublie/index.ts                 # libre-service : lien à usage unique par e-mail (PUBLIC)
+    mot-de-passe-oublie/email.ts                 # gabarit interne — distinct de celui des sondages (pas de mentions client)
   migrations/
     20260723090200_base_schema.sql               # FONDATEUR : conseillers, reponses_satisfaction, leads, lead_notes, v_satisfaction_agence
     20260723090300_agences.sql                  # table agences (code -> nom/zone) + seed
@@ -46,6 +48,9 @@ supabase/
     20260729130000_admin_reserve_super_admin.sql # est_super_admin() + écritures envois/conseillers réservées
     20260730100000_role_conseiller.sql           # rôle conseiller : profils.conseiller_id + RLS par périmètre
     20260730120000_relance_j7.sql                # date_relance + vue v_relances_a_faire (file du rappel J+7)
+    20260730180000_journal_relances.sql          # journal des passages de relance (supervision par la fraîcheur)
+    20260730190000_profils_lecture_restreinte.sql # un compte ne lit plus que sa propre ligne de profils
+    20260730200000_reinitialisation_mot_de_passe.sql # jetons de mot de passe oublié (empreinte seule, usage unique)
 scripts/
   creer_comptes.mjs                             # comptes d'accès : deux listes nominatives (managers, conseillers actifs)
   relance_j7_cron.sql                           # à jouer une fois : pg_cron quotidien qui déclenche la relance
@@ -184,6 +189,33 @@ qu'il a suivis restent dans le NPS réseau, les moyennes d'agence et le classeme
 compte d'accès (`profils` + `auth.users`) ne touche aucune donnée métier — vérifié le 30/07/2026 en
 supprimant 28 comptes : réponses, envois, NPS réseau et CSAT strictement inchangés. Une arrivée
 s'ajoute donc dans la liste du script, un départ s'en retire.
+
+### Mot de passe oublié
+
+Bouton sur l'écran de connexion → e-mail avec un lien à usage unique → écran de choix du nouveau
+mot de passe. Edge Function `mot-de-passe-oublie` (publique, `verify_jwt = false`).
+
+**Pas le flux natif Supabase** : `resetPasswordForEmail` suppose un SMTP configuré côté Auth, absent
+sur ce projet — l'expéditeur intégré plafonne à 2 e-mails/heure et ne sert que les membres du projet.
+On passe par le relais Brevo déjà en service. Si un jour le SMTP Auth est configuré, ce chemin
+devient remplaçable ; en attendant il est le seul qui fonctionne.
+
+Quatre garde-fous, tous nécessaires sur un endpoint public :
+
+- **Réponse strictement identique** pour un compte connu, inconnu, désactivé, une saisie vide ou un
+  dépassement de débit. Distinguer les cas transformerait l'endpoint en annuaire du personnel.
+- **Le jeton n'est jamais stocké**, seulement son empreinte SHA-256 (`jetons_mot_de_passe`, migration
+  `20260730200000`). Corollaire assumé : **un lien perdu est irrécupérable**, y compris pour le super
+  admin — c'est le prix d'une table qui ne vaut rien si elle fuit.
+- **Usage unique par réservation avant action**, même idiome que la relance : `utilise_le` est posé
+  sous condition qu'il soit nul *avant* le changement, et libéré si celui-ci échoue.
+- **3 demandes par compte et par heure**, sinon on peut inonder la boîte d'un collègue et brûler le
+  quota Brevo.
+
+Le jeton voyage dans le **fragment** (`#recuperation=…`), jamais transmis au serveur : il n'apparaît
+ni dans les logs d'accès ni dans un `Referer`. Validité **1 heure** — annoncée dans l'e-mail par
+`VALIDITE` (`email.ts`) et appliquée par `VALIDITE_MS` (`index.ts`) : **les deux doivent bouger
+ensemble**.
 
 L'espace **Administration** est fermé au manager côté serveur, pas seulement masqué : les policies
 d'écriture de `envois_sondage` et `conseillers` exigent `public.est_super_admin()`, et `envoi-sondage`
