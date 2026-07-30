@@ -2,9 +2,16 @@
 // =============================================================================
 //  ANSET — Création en masse des comptes d'accès à l'app de pilotage.
 //
-//  Un compte par conseiller de la table `conseillers` (le login de la requête,
-//  ex. `manon.marrocq`), sauf ceux listés dans MANAGERS — qui reçoivent le rôle
-//  `manager` (pilotage réseau complet) — et ceux listés dans EXCLUS.
+//  Un compte par personne listée ci-dessous : MANAGERS (pilotage réseau complet)
+//  et CONSEILLERS (périmètre limité à leurs propres réponses).
+//
+//  POURQUOI DEUX LISTES NOMINATIVES ET PAS « TOUS LES CONSEILLERS DE LA TABLE »,
+//  comme dans la première version : `conseillers` contient aussi les PARTANTS, et
+//  ce n'est pas un défaut. Les réponses d'un client restent comptées dans les
+//  agrégats même si le conseiller qui l'a suivi a quitté ANSET — rien dans les vues
+//  ne filtre sur `conseillers.actif`, et c'est voulu. La table est donc l'historique
+//  des gestionnaires, pas l'organigramme du jour : partir d'elle recréerait les
+//  comptes des partants (28 supprimés à dessein le 30/07/2026).
 //
 //  Pourquoi un script et pas l'onglet Utilisateurs : une cinquantaine de comptes
 //  à créer un par un, chacun avec son rattachement. Le script fait exactement ce
@@ -45,9 +52,33 @@ const MANAGERS = [
   { login: "maimiti.tapare",  nom: "Maimiti Tapare" },
 ];
 
-// --- Qui n'est pas une personne ---------------------------------------------
-// `web` est le pseudo-gestionnaire des souscriptions en ligne : pas de compte.
-const EXCLUS = new Set(["web"]);
+// --- Les conseillers actifs --------------------------------------------------
+// Liste fournie par le métier le 30/07/2026. À TENIR À JOUR : c'est elle qui fait
+// foi, pas la table `conseillers` (cf. l'en-tête). Une arrivée s'ajoute ici, un
+// départ se retire ici puis se désactive dans l'onglet Utilisateurs — sans jamais
+// toucher à ses données, qui continuent d'alimenter les indicateurs.
+//
+// Une chaîne = l'adresse ET le rattachement sont identiques, le cas courant.
+// Un objet = les deux DIVERGENT, et il faut alors savoir lequel sert à quoi :
+//   · `adresse`       → la boîte réelle de la personne, avec laquelle elle se connecte ;
+//   · `conseiller_id` → la clé produite par l'extraction mensuelle (`slugConseiller`
+//                       remplace tout séparateur par un point), et donc la seule
+//                       valeur qui porte ses envois et ses réponses.
+// Un nom composé s'écrit « maiau-tetua » dans l'annuaire et « maiau.tetua » dans la
+// requête : mettre le tiret dans le rattachement rattacherait la personne à un
+// conseiller inexistant, et son écran resterait vide.
+const CONSEILLERS = [
+  "raina.amaru", "james.laudes", "dorian.bodin", "daisy.lysao", "tahiata.teissier",
+  "eimeo.chanlo", "jeannine.cuny", "manutaia.tehahe", "oceane.paulin", "poetini.teahui",
+  "miwana.hauata", "ioane.tuporo", "deana.tamarii", "angela.faraire", "kaureka.tehei",
+  "melina.teraiamano", "mairani.ateo", "vaiani.teahui", "naea.raveino", "hina.sansine",
+  "titaina.pea", "muriel.lima",
+  { adresse: "heilani.maiau-tetua",   conseiller_id: "heilani.maiau.tetua" },
+  { adresse: "titaina.raapoto-rehua", conseiller_id: "titaina.raapoto.rehua" },
+];
+// Maimiti Tapare figure dans la liste métier des conseillers actifs mais reste
+// `manager` (arbitré le 30/07/2026) : elle pilote le réseau entier. Elle est donc
+// dans MANAGERS et pas ici — un compte ne porte qu'un rôle.
 
 // -----------------------------------------------------------------------------
 if (!SERVICE) {
@@ -108,15 +139,34 @@ const main = async () => {
   if (!Array.isArray(conseillers)) throw new Error(`Lecture de conseillers impossible : ${JSON.stringify(conseillers)}`);
 
   const profilParEmail = new Map((profils ?? []).map((p) => [String(p.email).toLowerCase(), p]));
-  const loginsManagers = new Set(MANAGERS.map((m) => m.login));
+  const nomParId = new Map(conseillers.map((c) => [c.id, c.nom]));
 
-  // Un manager peut ou non figurer dans `conseillers` : on part de la liste
-  // nominative, puis on complète avec tous les autres conseillers.
+  // Une entrée-chaîne signifie « adresse et rattachement identiques ».
+  const conseillersNormalises = CONSEILLERS.map((c) =>
+    typeof c === "string" ? { adresse: c, conseiller_id: c } : c);
+
+  // Un rattachement absent de `conseillers` violerait la clé étrangère de
+  // `profils` : l'erreur arriverait compte par compte, au milieu de la boucle. On
+  // s'arrête avant d'avoir rien créé — une faute de frappe dans la liste ci-dessus
+  // est le scénario le plus probable, et elle laisserait sinon la personne
+  // rattachée à un conseiller inexistant, écran vide et cause invisible.
+  const inconnus = conseillersNormalises.filter((c) => !nomParId.has(c.conseiller_id));
+  if (inconnus.length) {
+    console.error("✗ Rattachement inconnu dans la table `conseillers` :\n"
+      + inconnus.map((c) => `    ${c.conseiller_id}  (adresse ${c.adresse}@${DOMAINE})`).join("\n")
+      + "\n  Vérifie l'orthographe : la clé est celle de la colonne « Gestionnaire »"
+      + " de la requête mensuelle, séparateurs remplacés par des points.");
+    process.exit(1);
+  }
+
   const aCreer = [
-    ...MANAGERS.map((m) => ({ ...m, role: "manager", conseiller_id: null })),
-    ...conseillers
-      .filter((c) => !EXCLUS.has(c.id) && !loginsManagers.has(c.id))
-      .map((c) => ({ login: c.id, nom: c.nom || titre(c.id), role: "conseiller", conseiller_id: c.id })),
+    ...MANAGERS.map((m) => ({ login: m.login, nom: m.nom, role: "manager", conseiller_id: null })),
+    ...conseillersNormalises.map((c) => ({
+      login: c.adresse,
+      nom: nomParId.get(c.conseiller_id) || titre(c.conseiller_id),
+      role: "conseiller",
+      conseiller_id: c.conseiller_id,
+    })),
   ];
 
   console.log(`${DRY ? "APERÇU — aucune écriture" : "CRÉATION"} · ${aCreer.length} compte(s) · ${SB_URL}\n`);
@@ -164,7 +214,8 @@ const main = async () => {
   const crees = lignes.filter((x) => /^[A-Za-z0-9]{4}-/.test(String(x[3]))).length;
   const echecs = lignes.filter((x) => String(x[3]).startsWith("✗")).length;
   console.log(`\n${DRY ? "Aperçu terminé." : `${crees} compte(s) créé(s), ${echecs} échec(s).`}`
-    + " Les conseillers se connectent avec leur seul identifiant de requête (ex. manon.marrocq).");
+    + " Les conseillers se connectent avec leur seul identifiant, la page complète le domaine"
+    + " (ex. hina.sansine, ou heilani.maiau-tetua : c'est l'ADRESSE qui se saisit, pas le périmètre).");
 };
 
 main().catch((e) => { console.error("✗", e.message); process.exit(1); });

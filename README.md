@@ -47,7 +47,7 @@ supabase/
     20260730100000_role_conseiller.sql           # rôle conseiller : profils.conseiller_id + RLS par périmètre
     20260730120000_relance_j7.sql                # date_relance + vue v_relances_a_faire (file du rappel J+7)
 scripts/
-  creer_comptes.mjs                             # création en masse des comptes (managers nommés, reste en conseiller)
+  creer_comptes.mjs                             # comptes d'accès : deux listes nominatives (managers, conseillers actifs)
   relance_j7_cron.sql                           # à jouer une fois : pg_cron quotidien qui déclenche la relance
   purge_rgpd.sql                                # cron mensuel de purge des leads sans_suite/ne_pas_contacter
   desactivation_surveymonkey.md                  # état + actions (aucun cron déployé)
@@ -147,11 +147,17 @@ Table `profils` (une ligne par compte `auth.users`), trois rôles :
 
 ### Le rôle `conseiller`
 
-L'identifiant est le **login de la requête mensuelle** (colonne « Gestionnaire », ex.
-`manon.marrocq`) : c'est déjà la clé de `conseillers.id` et la valeur portée par
-`reponses_satisfaction.conseiller_id`. Le compte auth utilise `<login>@anset.pf` — la page de
-connexion complète le domaine, un conseiller saisit son seul identifiant — mais le rattachement
-qui fait foi est `profils.conseiller_id`, pas l'adresse.
+Le rattachement est le **login de la requête mensuelle** (colonne « Gestionnaire », ex.
+`hina.sansine`) : c'est déjà la clé de `conseillers.id` et la valeur portée par
+`reponses_satisfaction.conseiller_id`. Le compte auth utilise en principe `<login>@anset.pf` — la
+page de connexion complète le domaine, un conseiller saisit son seul identifiant.
+
+**Adresse et rattachement peuvent diverger, et c'est prévu** : `profils.conseiller_id` fait foi,
+jamais l'adresse. Un nom composé s'écrit `maiau-tetua` dans l'annuaire mais `maiau.tetua` dans la
+requête (`slugConseiller` remplace tout séparateur par un point). Deux comptes sont dans ce cas —
+`heilani.maiau-tetua` et `titaina.raapoto-rehua` : l'adresse porte le tiret, le rattachement le
+point. Mettre le tiret dans le rattachement rattacherait la personne à un conseiller inexistant, et
+son écran resterait vide sans que rien ne le signale.
 
 Le cloisonnement est en base, pas à l'écran :
 
@@ -168,8 +174,16 @@ Le cloisonnement est en base, pas à l'écran :
 - L'onglet **Satisfaction** lui est retiré : agrégé sur ses seules lignes, il afficherait ses
   chiffres sous des titres « réseau », « agence », « classement ».
 
-Création en masse (une cinquantaine de comptes) : `node scripts/creer_comptes.mjs --dry` puis sans
-`--dry`. Idempotent, il liste les managers nommément et crée tous les autres conseillers de la table.
+Création en masse : `node scripts/creer_comptes.mjs --dry` puis sans `--dry`. Idempotent, il part de
+**deux listes nominatives** (`MANAGERS`, `CONSEILLERS`) — et surtout **pas** de la table
+`conseillers`, qui est l'historique des gestionnaires et non l'organigramme du jour.
+
+C'est la distinction à ne pas perdre : **un conseiller parti n'a pas de compte, mais ses réponses
+comptent toujours**. Aucune vue ne filtre sur `conseillers.actif`, donc les réponses des clients
+qu'il a suivis restent dans le NPS réseau, les moyennes d'agence et le classement. Supprimer un
+compte d'accès (`profils` + `auth.users`) ne touche aucune donnée métier — vérifié le 30/07/2026 en
+supprimant 28 comptes : réponses, envois, NPS réseau et CSAT strictement inchangés. Une arrivée
+s'ajoute donc dans la liste du script, un départ s'en retire.
 
 L'espace **Administration** est fermé au manager côté serveur, pas seulement masqué : les policies
 d'écriture de `envois_sondage` et `conseillers` exigent `public.est_super_admin()`, et `envoi-sondage`
