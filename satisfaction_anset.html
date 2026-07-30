@@ -211,7 +211,10 @@
     <h1>Pilotage ANSET</h1>
     <p>Accès réservé — données clients protégées (RLS Supabase).</p>
     <div id="gate-err"></div>
-    <input type="email" id="gate-email" placeholder="Email" autocomplete="username" />
+    <!-- Un conseiller se connecte avec l'identifiant qu'il connaît déjà, celui de
+         la requête (« manon.marrocq ») : le domaine est complété au vol. D'où un
+         champ texte et non `type=email`. -->
+    <input type="text" id="gate-email" placeholder="Identifiant ou e-mail" autocomplete="username" inputmode="email" />
     <input type="password" id="gate-pass" placeholder="Mot de passe" autocomplete="current-password" />
     <button id="gate-btn">Se connecter</button>
   </div>
@@ -224,7 +227,12 @@
       <div><b>ANSET</b> · Pilotage satisfaction<br><span>Assurances — Tahiti</span></div></div>
     <div class="sp"></div>
     <div class="seg" id="tabs">
-      <button class="on" data-view="satisfaction">Satisfaction</button>
+      <!-- « Mes résultats » remplace « Satisfaction » pour un conseiller : le
+           dashboard réseau agrège des périmètres qu'il n'a pas le droit de lire,
+           la RLS le lui rendrait rempli de ses seuls chiffres sous une étiquette
+           réseau. Un écran par lecture, pas un écran filtré. -->
+      <button data-view="moi" id="tab-moi" hidden>Mes résultats</button>
+      <button class="on" data-view="satisfaction" id="tab-satisfaction">Satisfaction</button>
       <button data-view="prospection">Prospection</button>
       <!-- Administration et Utilisateurs : révélés au boot pour le seul super admin
            (cf. appliquerRole). Le masquage est du confort, la barrière est la RLS
@@ -308,6 +316,52 @@
       </div>
     </div>
     <div id="sat-empty" class="card empty" style="display:none">Aucune réponse pour l'instant. Le dashboard s'alimentera dès les premières réponses.</div>
+  </section>
+
+  <!-- ===== MES RÉSULTATS (conseiller) ===== -->
+  <!-- Même source que le dashboard manager (`v_satisfaction_conseiller`,
+       `v_verbatims`) : la RLS a DÉJÀ réduit ces vues aux réponses du conseiller
+       connecté, on ne refiltre pas ici — un filtre client sur des données que le
+       serveur a laissé passer ne protège rien et masque les vrais trous.
+       Seul repère à l'échelle du réseau : `v_satisfaction_reseau`, agrégat par
+       campagne sans nom de collègue. -->
+  <section class="view" id="view-moi">
+    <div class="toolbar">
+      <label class="fld">Campagne <select id="m-campagne"></select></label>
+      <div class="sp"></div>
+      <button class="ghost" id="m-refresh">Actualiser</button>
+    </div>
+    <div id="m-body">
+      <div class="hero">
+        <div class="card pad hero-nps">
+          <div class="eyebrow">Mes clients me recommandent · indice NPS</div>
+          <div class="score"><div class="big num" id="m-score">—</div><div id="m-side"></div></div>
+          <div class="scale">
+            <div class="scaletrack"><div class="scaletarget" id="m-target"></div>
+              <div class="scalemark" id="m-reseau" style="left:50%; background:var(--ciel)" data-tip="Score du réseau, toutes agences confondues."></div>
+              <div class="scalemark" id="m-mark" style="left:50%" data-tip="Mon score."></div></div>
+            <div class="scalelbls"><span>−100</span><span>0</span><span id="m-targetlbl"></span><span>+100</span></div>
+          </div>
+          <div class="herofoot" id="m-foot"></div>
+        </div>
+        <div class="card pad">
+          <div class="eyebrow">Composition de mes réponses</div>
+          <div class="compo-bar" id="m-compo"></div>
+          <div class="legend" id="m-compo-legend"></div>
+          <div class="herofoot" id="m-compo-foot"></div>
+        </div>
+      </div>
+
+      <p class="capline" id="m-capline"></p>
+      <div class="kpis" id="m-kpis"></div>
+
+      <div class="card pad" style="margin-top:16px">
+        <h2 class="title">Ce que disent mes clients</h2>
+        <p class="sub">Priorité aux détracteurs</p>
+        <div id="m-verbatims"></div>
+      </div>
+    </div>
+    <div id="m-empty" class="card empty" style="display:none">Aucune réponse ne vous est rattachée pour l'instant. Vos indicateurs apparaîtront dès qu'un client invité sur votre nom aura répondu.</div>
   </section>
 
   <!-- ===== PROSPECTION ===== -->
@@ -403,22 +457,46 @@
       </div>
       <div id="d-notice"></div><div id="d-report"></div><div id="d-progress"></div>
     </div>
+
+    <!-- Relance J+7. Volontairement séparée de la diffusion : ce n'est pas le même
+         geste, pas le même e-mail, et surtout pas le même périmètre — la file est
+         globale, pas mensuelle. -->
+    <div class="card pad" style="margin-top:16px; border-left:4px solid var(--ciel)">
+      <h2 class="title">Relance des non-répondants</h2>
+      <p class="sub">Un <b>seul</b> rappel par invitation, 7 jours après l'envoi, aux clients qui n'ont pas répondu.
+        Toutes campagnes confondues : un lot parti fin de mois se relance début du mois suivant.</p>
+      <div class="adminrow">
+        <button class="btn ghost" id="rl-refresh">Actualiser le compte</button>
+        <button class="btn ghost" id="rl-dry">Aperçu (aucun envoi)</button>
+        <button class="btn" id="rl-send">Relancer</button>
+      </div>
+      <div id="rl-count" class="sub" style="margin-top:12px">—</div>
+      <div id="rl-notice"></div>
+    </div>
   </section>
 
   <!-- ===================== UTILISATEURS (super admin) ===================== -->
   <section class="view" id="view-utilisateurs">
-    <p class="sub" style="margin-bottom:16px">Comptes d'accès à l'app. Le <b>super administrateur</b> gère les comptes ; un <b>manager</b> accède au pilotage, à la prospection, aux imports et à la diffusion.</p>
+    <p class="sub" style="margin-bottom:16px">Comptes d'accès à l'app. Le <b>super administrateur</b> gère les comptes, les imports et la diffusion ; un <b>manager</b> voit le pilotage réseau et la prospection ; un <b>conseiller</b> voit la prospection et ses seuls résultats de satisfaction.</p>
     <div class="grid2">
       <div class="card pad">
         <h2 class="title">Nouveau compte</h2>
-        <p class="sub">Le mot de passe provisoire s'affiche une fois : transmettez-le à la personne, qui le changera.</p>
+        <p class="sub">Choisissez un mot de passe, ou laissez le champ vide pour en générer un — il s'affiche alors une seule fois. Dans les deux cas, transmettez-le à la personne, qui le changera.</p>
         <div class="adminrow" style="flex-wrap:wrap">
           <label class="fld">E-mail <input type="email" id="u-email" placeholder="prenom.nom@anset.pf"></label>
           <label class="fld">Nom <input type="text" id="u-nom" placeholder="Prénom Nom"></label>
           <label class="fld">Rôle <select id="u-role">
             <option value="manager">Manager</option>
+            <option value="conseiller">Conseiller</option>
             <option value="super_admin">Super administrateur</option>
           </select></label>
+          <!-- Le périmètre d'un conseiller = son login de requête. On le choisit
+               dans la liste réelle des gestionnaires plutôt qu'on ne le tape :
+               un slug inventé donnerait un compte qui ne voit rien. -->
+          <label class="fld" id="u-lien-fld" hidden>Conseiller <select id="u-conseiller"></select></label>
+          <!-- Champ en clair et non masqué : ce mot de passe n'est pas celui de
+               l'administrateur, il est destiné à être lu puis transmis. -->
+          <label class="fld">Mot de passe <input type="text" id="u-mdp" placeholder="vide = généré" autocomplete="new-password" spellcheck="false"></label>
           <button class="btn" id="u-creer">Créer le compte</button>
         </div>
         <div id="u-notice"></div><div id="u-secret"></div>
@@ -428,7 +506,8 @@
         <p class="sub" style="margin:0">
           Un compte désactivé ne peut plus se connecter, son historique reste intact.<br>
           Impossible de modifier, désactiver ou supprimer son propre compte — demandez-le à un autre super administrateur.<br>
-          Il doit toujours rester au moins un super administrateur actif.
+          Il doit toujours rester au moins un super administrateur actif.<br>
+          Un compte <b>conseiller</b> est rattaché à un login de la requête (ex. <span class="tag-mono">manon.marrocq</span>) : il se connecte avec ce seul identifiant et ne voit que les réponses portant son nom.
         </p>
       </div>
     </div>
@@ -488,6 +567,13 @@ const tauxColor =v=> v==null?cssv("--faint"): v<10?cssv("--bad") : v<15?cssv("--
 const delaiColor=v=> v==null?cssv("--faint"): v<=30?cssv("--good") : v<=40?cssv("--warn") : cssv("--bad");
 let currentUserEmail=null;
 
+// Un conseiller connaît son identifiant de requête (« manon.marrocq »), pas une
+// adresse : Supabase Auth n'authentifie que des e-mails, on complète au domaine
+// maison. Même règle à la connexion et à la création de compte, sinon on
+// fabriquerait des comptes que personne ne sait joindre.
+const DOMAINE_COMPTES="anset.pf";
+const adresseCompte=s=>{ s=(s||"").trim().toLowerCase(); return s&&!s.includes("@")?`${s}@${DOMAINE_COMPTES}`:s; };
+
 // statut/pill dérivés
 function stScore(v){ return v==null?["flat","—"]: v>=CIBLE_NPS?["good","Bon"]: v>=0?["warn","Correct"]:["bad","À redresser"]; }
 function stCsat(v){ return v==null?["flat","—"]: v>=4?["good","Bon"]: v>=3?["warn","Moyen"]:["bad","Faible"]; }
@@ -502,16 +588,20 @@ function stConsent(v){ return v==null?["flat","—"]: v>=25?["good","Bon"]: v>=1
 const consentColor=v=> v==null?cssv("--faint"): v<15?cssv("--bad") : v<25?cssv("--warn") : cssv("--good");
 const stCol=s=>({good:cssv("--good"),warn:cssv("--warn"),bad:cssv("--bad"),brand:cssv("--mauve"),flat:cssv("--muted")}[s]);
 
-// delta {invert:true si baisse = mieux}
+// delta {invert:true si baisse = mieux ; vs:campagne de référence}
+// `vs` : l'écran « Mes résultats » a son propre sélecteur de campagne, il ne peut
+// pas hériter du `prevCamp` du dashboard réseau — le libellé annoncerait une
+// comparaison avec un mois qui n'est pas celui du calcul.
 function deltaTag(cur,prev,opt={}){
   if(cur==null||prev==null) return `<span class="trendtag flat">—</span>`;
   const d=cur-prev, eps=opt.eps??0.05, unit=opt.unit||"";
+  const ref=opt.vs!==undefined?opt.vs:prevCamp;
   const better = opt.invert? d<-eps : d>eps;
   const worse  = opt.invert? d>eps  : d<-eps;
   const cls=better?"up":worse?"down":"flat";
   const arr=Math.abs(d)<=eps?"=":(d>0?"▲":"▼");
   const val=(d>0?"+":"")+ (Number.isInteger(d)?d:d.toFixed(1).replace(".",","));
-  return `<span class="trendtag ${cls}">${arr} ${val}${unit} <span class="vs">vs ${moisCourt(prevCamp)}</span></span>`;
+  return `<span class="trendtag ${cls}">${arr} ${val}${unit} <span class="vs">vs ${moisCourt(ref)}</span></span>`;
 }
 
 // ---- SVG : lissage + sparkline + infobulle ----
@@ -566,23 +656,29 @@ function tile(k){
 // libellé sous la jauge, légende du graphe de tendance).
 function initCible(){
   const lbl=`Objectif ${CIBLE_NPS>0?"+":""}${CIBLE_NPS}`;
-  $("#h-target").style.left=((CIBLE_NPS+100)/2)+"%";   // −100…+100 projeté sur 0…100 %
-  $("#h-target").title=lbl;
-  $("#h-targetlbl").textContent=lbl;
+  // Deux jauges portent le repère : celle du réseau et celle de « Mes résultats ».
+  [["#h-target","#h-targetlbl"],["#m-target","#m-targetlbl"]].forEach(([t,l])=>{
+    $(t).style.left=((CIBLE_NPS+100)/2)+"%";           // −100…+100 projeté sur 0…100 %
+    $(t).title=lbl; $(l).textContent=lbl;
+  });
   $("#nps-trend-sub").textContent=`Par campagne · ligne pointillée = objectif ${CIBLE_NPS>0?"+":""}${CIBLE_NPS}`;
 }
-async function boot(){ initCible(); const {data}=await sb.auth.getSession(); setAuth(!!data.session, data.session?.user?.email); }
-function setAuth(logged,email){
+async function boot(){ initCible(); const {data}=await sb.auth.getSession(); await setAuth(!!data.session, data.session?.user?.email); }
+// Le rôle est appliqué AVANT le chargement : il décide de l'onglet d'atterrissage
+// et de l'écran à peindre (un conseiller n'a pas de dashboard réseau à remplir).
+async function setAuth(logged,email){
   $("#gate").style.display=logged?"none":"flex"; $("#app").style.display=logged?"block":"none";
   currentUserEmail=email||null; $("#who").textContent=email||"";
-  if(logged){ loadDashboard(); appliquerRole().catch(()=>{}); }
-  else { $("#tab-utilisateurs").hidden=true; $("#tab-requete").hidden=true; monRole=null; monUserId=null; }
+  if(logged){ await appliquerRole().catch(()=>{}); await loadDashboard(); }
+  else { $("#tab-utilisateurs").hidden=true; $("#tab-requete").hidden=true;
+         $("#tab-moi").hidden=true; $("#tab-satisfaction").hidden=false;
+         monRole=null; monUserId=null; monConseiller=null; }
 }
 $("#gate-btn").addEventListener("click", async ()=>{
-  const email=$("#gate-email").value.trim(), password=$("#gate-pass").value; $("#gate-err").innerHTML="";
+  const email=adresseCompte($("#gate-email").value), password=$("#gate-pass").value; $("#gate-err").innerHTML="";
   const {data,error}=await sb.auth.signInWithPassword({email,password});
   if(error){ $("#gate-err").innerHTML=`<div class="notice err">${esc(error.message)}</div>`; return; }
-  setAuth(true,data.user?.email);
+  await setAuth(true,data.user?.email);
 });
 $("#gate-pass").addEventListener("keydown",e=>{ if(e.key==="Enter")$("#gate-btn").click(); });
 $("#logout").addEventListener("click", async ()=>{ await sb.auth.signOut(); setAuth(false); });
@@ -596,11 +692,14 @@ $("#tabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   $("#view-"+b.dataset.view).classList.add("active");
   if(b.dataset.view==="prospection") loadLeads();
+  if(b.dataset.view==="moi") renderMoi();
   if(b.dataset.view==="utilisateurs") chargerUtilisateurs();
   if(b.dataset.view==="requete"){ const m=new Date().toISOString().slice(0,7);
     ["#r-campagne","#s-campagne","#d-campagne"].forEach(s=>{ if(!$(s).value)$(s).value=m; });
-    // État de la diffusion visible dès l'ouverture de l'onglet, sans rien lancer.
-    majProgression($("#d-campagne").value).catch(()=>{}); }
+    // État de la diffusion et de la file de relance visibles dès l'ouverture de
+    // l'onglet, sans rien lancer.
+    majProgression($("#d-campagne").value).catch(()=>{});
+    majRelances().catch(()=>{}); }
 });
 
 // ============================ DASHBOARD ============================
@@ -621,10 +720,13 @@ async function loadDashboard(){
   D.campagnes=[...new Set(reseau.map(r=>r.campagne).filter(Boolean))].sort();
   const has=D.campagnes.length>0;
   $("#sat-body").style.display=has?"block":"none"; $("#sat-empty").style.display=has?"none":"block";
+  majMoi();                       // écran conseiller (no-op pour les autres rôles)
   if(!has) return;
   const fc=$("#f-campagne"); fc.innerHTML=D.campagnes.map(c=>`<option value="${c}">${c}</option>`).join("");
   fc.value=D.campagnes[D.campagnes.length-1];
-  renderAll();
+  // Le dashboard réseau n'existe pas pour un conseiller (onglet retiré) : le
+  // peindre sur ses seules lignes serait du travail perdu sur un écran faux.
+  if(monRole!=="conseiller") renderAll();
 }
 $("#f-campagne").addEventListener("change",renderAll);
 $("#sat-refresh").addEventListener("click",loadDashboard);
@@ -842,6 +944,140 @@ function renderVerbatims(){
     <div class="vb ${v.detracteur?"det":""}"><p>« ${esc(v.commentaire)} »</p>
       <div class="meta"><span>${esc(v.agence||"—")}</span>${v.motif?`<span>${esc(MOTIF_LABELS[v.motif]||v.motif)}</span>`:""}${v.conseiller_id?`<span>${esc(v.conseiller_id)}</span>`:""}<span>${(v.date_reponse||"").slice(0,10)}</span><span>NPS ${v.nps??"—"}</span></div></div>`).join("")
     : '<div class="empty">Aucun commentaire.</div>';
+}
+
+// ====================== MES RÉSULTATS (conseiller) ======================
+// Aucune requête supplémentaire : tout vient de `D`, déjà chargé. Pour un compte
+// conseiller la RLS a réduit les vues à ses réponses (migration 20260730100000) ;
+// `D.reseau` fait exception — agrégat par campagne, il sert de repère.
+//
+// Le filtre sur `monConseiller` ci-dessous n'est PAS la protection (elle est en
+// base) : c'est un garde-fou d'exactitude, pour ne jamais peindre la ligne d'un
+// autre sous le titre « mes résultats » si le périmètre venait à s'élargir.
+const moiRow=c=>(D.conseillers||[]).find(x=>x.campagne===c && (!monConseiller||x.conseiller_id===monConseiller))||{};
+const moiSerie=f=>D.campagnes.map(c=>{ const v=moiRow(c)[f]; return v==null?null:Number(v); });
+const posNps=v=> v==null?50:Math.max(0,Math.min(100,(v+100)/2));
+
+function majMoi(){
+  if(monRole!=="conseiller") return;
+  const fc=$("#m-campagne");
+  fc.innerHTML=(D.campagnes||[]).map(c=>`<option value="${c}">${c}</option>`).join("");
+  // Atterrissage sur la dernière campagne où il a REÇU des réponses, pas sur la
+  // dernière du réseau : un conseiller absent du dernier fichier ouvrirait sinon
+  // un écran vide alors que ses résultats existent le mois d'avant.
+  const avecRep=(D.campagnes||[]).filter(c=>moiRow(c).reponses);
+  const cible=avecRep.length?avecRep[avecRep.length-1]:(D.campagnes||[]).slice(-1)[0];
+  if(cible) fc.value=cible;
+  renderMoi();
+}
+$("#m-campagne").addEventListener("change",renderMoi);
+$("#m-refresh").addEventListener("click",loadDashboard);
+
+function renderMoi(){
+  if(monRole!=="conseiller" || !D.campagnes) return;
+  const mCamp=$("#m-campagne").value;
+  const idx=D.campagnes.indexOf(mCamp), mPrev= idx>0 ? D.campagnes[idx-1] : null;
+  const r=moiRow(mCamp), rp=moiRow(mPrev), res=(D.reseau||[]).find(x=>x.campagne===mCamp)||{};
+  const vide=!r.reponses;
+  $("#m-body").style.display=vide?"none":"block";
+  $("#m-empty").style.display=vide?"block":"none";
+  if(vide) return;
+
+  // --- Hero : mon score, l'objectif, le réseau --------------------------------
+  const s=r.score_nps==null?null:Number(r.score_nps), sr=res.score_nps==null?null:Number(res.score_nps);
+  $("#m-score").textContent=(s==null?"—":(s>0?"+":"")+s); $("#m-score").style.color=scoreColor(s);
+  const [st0,verd]=stScore(s), c0=stCol(st0);
+  $("#m-side").innerHTML=`
+    <div class="verdict" style="background:color-mix(in srgb,${c0} 16%,transparent);color:${c0}">
+      <span class="ic" style="background:${c0}"></span>${verd}</div>
+    <div>${deltaTag(s, mPrev?(rp.score_nps==null?null:Number(rp.score_nps)):null, {unit:" pts", vs:mPrev})}</div>`;
+  $("#m-mark").style.left=posNps(s)+"%";
+  $("#m-reseau").style.display=sr==null?"none":"";
+  $("#m-reseau").style.left=posNps(sr)+"%";
+
+  const nRep=r.nps_rep||0, tot=r.reponses||0;
+  const ecart = (s!=null&&sr!=null) ? Math.round((s-sr)*10)/10 : null;
+  $("#m-foot").innerHTML=`Sur <b>${nRep} note${nRep>1?"s":""} NPS</b>`
+    + (tot>nRep?` <span class="ctx">(${tot} réponse${tot>1?"s":""} au total, ${tot-nRep} sans note)</span>`:"")
+    + `. `
+    + (sr==null?"":`Réseau : <b>${(sr>0?"+":"")+sr}</b> <span class="ctx">(repère bleu clair sur la jauge)</span>`
+        + (ecart==null?"." : ecart>0?` — vous êtes <b style="color:var(--good)">${fmt(Math.abs(ecart),1)} pt${Math.abs(ecart)>1?"s":""} au-dessus</b>.`
+          : ecart<0?` — vous êtes <b style="color:var(--bad)">${fmt(Math.abs(ecart),1)} pt${Math.abs(ecart)>1?"s":""} en dessous</b>.`
+          : ` — vous êtes <b>au niveau du réseau</b>.`))
+    + (nRep>0 && nRep<MIN_FIABLE ? ` <b style="color:var(--warn)">Échantillon faible</b> : chaque réponse déplace fortement le score.` : "")
+    + (nRep===0 ? ` <b style="color:var(--muted)">Aucune note NPS pour l'instant.</b>` : "");
+
+  // --- Composition ------------------------------------------------------------
+  // `v_satisfaction_conseiller` ne porte pas les passifs : ils se déduisent des
+  // notes NPS moins les deux extrêmes (7-8 par construction du NPS).
+  const pro=r.promoteurs||0, det=r.detracteurs||0, pas=Math.max(0,nRep-pro-det), base=nRep||1;
+  const seg=(n,col,lbl,plage)=> n?`<div style="flex:${n}; background:${col}" data-tip="<b>${lbl}</b> — ${plage}<br>${n} réponse${n>1?"s":""} · ${Math.round(100*n/base)}%">${Math.round(100*n/base)}%</div>`:"";
+  $("#m-compo").innerHTML=seg(pro,cssv("--good"),"Promoteurs","notes 9-10")+seg(pas,cssv("--warn"),"Passifs","notes 7-8")+seg(det,cssv("--bad"),"Détracteurs","notes 0-6")
+    || `<div style="flex:1; background:var(--faint)">aucune note</div>`;
+  $("#m-compo-legend").innerHTML=`
+    <span class="it"><span class="sw" style="background:var(--good)"></span>Promoteurs <b>${pro}</b></span>
+    <span class="it"><span class="sw" style="background:var(--warn)"></span>Passifs <b>${pas}</b></span>
+    <span class="it"><span class="sw" style="background:var(--bad)"></span>Détracteurs <b>${det}</b></span>`;
+  $("#m-compo-foot").innerHTML="Le score NPS = <b>% promoteurs − % détracteurs</b>.";
+  $("#m-capline").innerHTML=`Vos indicateurs sur la campagne <b>${esc(mCamp)}</b>`
+    + (monConseiller?` — identifiant <span class="tag-mono">${esc(monConseiller)}</span>`:"")
+    + `. Évolutions ${mPrev?`vs <b>${esc(mPrev)}</b>`:"(pas de campagne précédente)"}.`;
+
+  // --- Tuiles -----------------------------------------------------------------
+  // Chaque tuile rappelle le réseau en contexte : une note seule ne dit pas si
+  // elle est bonne, et un conseiller n'a pas accès au classement de ses collègues.
+  const num=v=>v==null?null:Number(v);
+  const reseauTip=(v,u)=> v==null?"":`<span data-tip="Même indicateur sur l'ensemble du réseau, à la même campagne.">réseau ${fmt(v,1)}${u}</span>`;
+  const K=[];
+  const csatM=num(r.csat_global), csatR=num(res.csat_global);
+  let [st,pill]=stCsat(csatM);
+  K.push({lbl:"Satisfaction de mes clients",sig:"note sur 100",n:csatPct(csatM)==null?"—":Math.round(csatPct(csatM)),u:"%",st,pill,
+    ctx:`${fmt(csatM,1)}/5 · ${reseauTip(csatR,"/5")||"réseau —"}`,
+    delta:deltaTag(csatPct(csatM),mPrev?csatPct(num(rp.csat_global)):null,{unit:" pts",vs:mPrev}),
+    spark:sparkline(moiSerie("csat_global").map(csatPct),stCol(st))});
+
+  const consM=num(r.csat_conseiller), consR=num(res.csat_conseiller);
+  [st,pill]=stCsat(consM);
+  K.push({lbl:"Ma qualité de conseil",sig:"écoute, clarté",n:fmt(consM,1),u:"/5",st,pill,
+    ctx:reseauTip(consR,"/5")||"note du conseiller",
+    delta:deltaTag(consM,mPrev?num(rp.csat_conseiller):null,{vs:mPrev}),
+    spark:sparkline(moiSerie("csat_conseiller"),stCol(st))});
+
+  const txM=num(r.taux_reponse);
+  [st,pill]=stTaux(txM);
+  K.push({lbl:"Taux de réponse",sig:"mes clients invités",n:txM==null?"—":Math.round(txM),u:"%",st,pill,
+    ctx:`${tot} rép. / ${r.envoyes||0} env.`,
+    delta:deltaTag(txM,mPrev?num(rp.taux_reponse):null,{unit:" pts",vs:mPrev}),
+    spark:sparkline(moiSerie("taux_reponse"),stCol(st))});
+
+  // Le consentement n'est pas dans la vue conseiller : on le calcule sur la même
+  // base que le réseau (part des réponses ayant accepté un recontact).
+  const tauxCons=row=>{ const n=row.reponses||0; return n?100*(row.consentements||0)/n:null; };
+  const consT=tauxCons(r);
+  [st,pill]=stConsent(consT);
+  K.push({lbl:"Recontacts acceptés",sig:"leads que j'ai générés",n:consT==null?"—":Math.round(consT),u:"%",st,pill,
+    ctx:`${r.consentements||0} lead${(r.consentements||0)>1?"s":""} sur ${tot} réponse${tot>1?"s":""}`,
+    delta:deltaTag(consT,mPrev?tauxCons(rp):null,{unit:" pts",vs:mPrev}),
+    spark:sparkline(D.campagnes.map(c=>tauxCons(moiRow(c))),stCol(st))});
+
+  // Sinistre : seulement pour qui en a traité — un gestionnaire de quittances
+  // n'a pas de note sinistre, une tuile « — » se lirait comme un mauvais score.
+  if(r.n_sinistre){
+    const sinM=num(r.csat_sinistre);
+    [st,pill]=stCsat(sinM);
+    K.push({lbl:"Gestion des sinistres",sig:"clients indemnisés",n:fmt(sinM,1),u:"/5",st,pill,
+      ctx:`${r.n_sinistre} réponse${r.n_sinistre>1?"s":""} d'indemnisés${r.delai_reel?` · ${fmt(r.delai_reel,0)} j de traitement`:""}`,
+      delta:deltaTag(sinM,mPrev?num(rp.csat_sinistre):null,{vs:mPrev})});
+  }
+  $("#m-kpis").innerHTML=K.map(tile).join("");
+
+  // --- Verbatims --------------------------------------------------------------
+  const vb=(D.verbatims||[]).filter(v=>v.campagne===mCamp && (!monConseiller||v.conseiller_id===monConseiller));
+  vb.sort((a,b)=>(b.detracteur?1:0)-(a.detracteur?1:0));
+  $("#m-verbatims").innerHTML= vb.length? vb.slice(0,40).map(v=>`
+    <div class="vb ${v.detracteur?"det":""}"><p>« ${esc(v.commentaire)} »</p>
+      <div class="meta"><span>${esc(v.agence||"—")}</span>${v.motif?`<span>${esc(MOTIF_LABELS[v.motif]||v.motif)}</span>`:""}<span>${(v.date_reponse||"").slice(0,10)}</span><span>NPS ${v.nps??"—"}</span></div></div>`).join("")
+    : '<div class="empty">Aucun commentaire sur cette campagne.</div>';
 }
 
 // ============================ PROSPECTION ============================
@@ -1243,8 +1479,8 @@ function suivreProgression(camp){
 // Toute la mécanique vit dans l'Edge Function `admin-utilisateurs` : créer un
 // compte suppose la clé service_role, qui ne descend jamais ici. Le masquage de
 // l'onglet est du confort — la vraie barrière est côté serveur.
-const ROLE_LABELS={ super_admin:"Super administrateur", manager:"Manager" };
-let monRole=null, monUserId=null;
+const ROLE_LABELS={ super_admin:"Super administrateur", manager:"Manager", conseiller:"Conseiller" };
+let monRole=null, monUserId=null, monConseiller=null;
 
 async function appelAdmin(corps){
   const {data:{session}}=await sb.auth.getSession();
@@ -1258,31 +1494,67 @@ async function appelAdmin(corps){
   return j;
 }
 
-// Lit le rôle du compte connecté et révèle l'onglet si super admin.
+// Lit le rôle du compte connecté et ajuste les onglets. Le masquage reste du
+// confort : la barrière est la RLS (`est_super_admin()`, `est_conseiller()`) et le
+// contrôle dans les Edge Functions.
 async function appliquerRole(){
-  monRole=null; monUserId=null;
+  monRole=null; monUserId=null; monConseiller=null;
   const {data:{session}}=await sb.auth.getSession();
   monUserId=session?.user?.id||null;
   if(monUserId){
-    const {data}=await sb.from("profils").select("role").eq("user_id",monUserId).maybeSingle();
-    monRole=data?.role||null;
+    const {data}=await sb.from("profils").select("role, conseiller_id").eq("user_id",monUserId).maybeSingle();
+    monRole=data?.role||null; monConseiller=data?.conseiller_id||null;
   }
   const admin = monRole==="super_admin";
+  const cons  = monRole==="conseiller";
   $("#tab-utilisateurs").hidden = !admin;
-  $("#tab-requete").hidden = !admin;
-  // Un manager ne doit jamais rester sur un onglet qu'il n'a plus le droit de voir
-  // (rôle rétrogradé pendant la session, onglet actif au moment du changement).
-  if(!admin){
-    const actif=document.querySelector("#tabs button.on");
-    if(actif && (actif.dataset.view==="requete"||actif.dataset.view==="utilisateurs"))
-      document.querySelector('#tabs button[data-view="satisfaction"]').click();
-  }
+  $("#tab-requete").hidden      = !admin;
+  $("#tab-moi").hidden          = !cons;
+  // Le dashboard réseau est retiré au conseiller : la RLS ne lui rend que ses
+  // propres lignes, l'écran afficherait ses chiffres sous des titres « réseau »,
+  // « agence », « classement » — faux, et impossible à lire comme tel.
+  $("#tab-satisfaction").hidden = cons;
+  // Personne ne doit rester sur un onglet qu'il n'a pas (ou plus) le droit de voir
+  // — rôle changé pendant la session, ou simple atterrissage à la connexion.
+  const permis=v=> v==="prospection" || (v==="moi"&&cons) || (v==="satisfaction"&&!cons)
+    || ((v==="requete"||v==="utilisateurs")&&admin);
+  const actif=document.querySelector("#tabs button.on");
+  if(!actif || !permis(actif.dataset.view))
+    document.querySelector(`#tabs button[data-view="${cons?"moi":"satisfaction"}"]`).click();
 }
 
 const uNotice=(m,k="ok")=>{ $("#u-notice").innerHTML=`<div class="notice ${k}">${esc(m)}</div>`; };
 
+// Logins de requête disponibles pour rattacher un compte conseiller. `conseillers`
+// est lisible par tout compte connecté : inutile de passer par l'Edge Function.
+// Partagé avec la prospection (`conseillersList`), chargé une fois.
+async function chargerConseillersOptions(){
+  if(!conseillersList.length){
+    const {data}=await sb.from("conseillers").select("id,nom").order("nom",{ascending:true});
+    conseillersList=(data||[]).sort((a,b)=>(a.nom||a.id).localeCompare(b.nom||b.id,"fr"));
+  }
+  return conseillersList;
+}
+const optionsConseillers=sel=>`<option value="">— choisir —</option>`
+  +conseillersList.map(c=>`<option value="${esc(c.id)}" ${c.id===sel?"selected":""}>${esc(c.nom||nomFromSlug(c.id))} · ${esc(c.id)}</option>`).join("");
+
+$("#u-role").addEventListener("change", async ()=>{
+  const cons=$("#u-role").value==="conseiller";
+  $("#u-lien-fld").hidden=!cons;
+  if(cons){ await chargerConseillersOptions(); $("#u-conseiller").innerHTML=optionsConseillers($("#u-conseiller").value); }
+});
+// Le login de la requête EST l'identifiant de connexion : on propose l'adresse et
+// le nom correspondants plutôt que de les faire ressaisir (et diverger).
+$("#u-conseiller").addEventListener("change",()=>{
+  const slug=$("#u-conseiller").value; if(!slug) return;
+  if(!$("#u-email").value.trim()) $("#u-email").value=adresseCompte(slug);
+  if(!$("#u-nom").value.trim()){ const c=conseillersList.find(x=>x.id===slug); $("#u-nom").value=(c&&c.nom)||nomFromSlug(slug); }
+});
+
 function renderUtilisateurs(rows){
-  $("#u-table").innerHTML=`<thead><tr><th>E-mail</th><th>Nom</th><th>Rôle</th><th>État</th><th>Créé le</th><th></th></tr></thead><tbody>`+
+  $("#u-table").innerHTML=`<thead><tr><th>E-mail</th><th>Nom</th><th>Rôle</th>`
+    +`<th data-tip="Pour un conseiller : le login de la requête qui délimite ce qu'il voit.">Périmètre</th>`
+    +`<th>État</th><th>Créé le</th><th></th></tr></thead><tbody>`+
     rows.map(u=>{
       const moi=u.user_id===monUserId;
       const opts=Object.keys(ROLE_LABELS).map(r=>`<option value="${r}" ${r===u.role?"selected":""}>${ROLE_LABELS[r]}</option>`).join("");
@@ -1292,15 +1564,29 @@ function renderUtilisateurs(rows){
         `<select class="u-role" data-id="${u.user_id}">${opts}</select>
          <button class="btn ghost u-actif" data-id="${u.user_id}" data-actif="${u.actif?1:0}">${u.actif?"Désactiver":"Réactiver"}</button>
          <button class="btn ghost u-suppr" data-id="${u.user_id}" data-email="${esc(u.email)}">Supprimer</button>`;
+      // Le rattachement ne se change que pour un compte déjà conseiller ; pour les
+      // autres rôles la colonne est vide (ils voient tout le réseau).
+      const perimetre = u.role!=="conseiller" ? `<span class="sub">tout le réseau</span>`
+        : moi ? `<span class="tag-mono">${esc(u.conseiller_id||"—")}</span>`
+        : `<select class="u-lien" data-id="${u.user_id}">${optionsConseillers(u.conseiller_id)}</select>`;
       return `<tr><td class="mono">${esc(u.email)}</td><td>${esc(u.nom||"—")}</td>
         <td>${ROLE_LABELS[u.role]||esc(u.role)}</td>
+        <td>${perimetre}</td>
         <td>${u.actif?"Actif":"<b>Désactivé</b>"}</td>
         <td>${u.created_at?new Date(u.created_at).toLocaleDateString("fr-FR"):"—"}</td>
         <td>${actions}</td></tr>`;
     }).join("")+`</tbody>`;
   document.querySelectorAll(".u-role").forEach(s=>s.addEventListener("change",async e=>{
+    // Pas de conseiller_id transmis : la fonction retombe sur la partie locale de
+    // l'adresse (`manon.marrocq@anset.pf` → `manon.marrocq`) et refuse si ce login
+    // n'existe pas — le rattachement se corrige alors dans la colonne Périmètre.
     try{ const j=await appelAdmin({action:"role",user_id:e.target.dataset.id,role:e.target.value});
       renderUtilisateurs(j.utilisateurs); uNotice("Rôle mis à jour."); }
+    catch(err){ uNotice(err.message,"err"); chargerUtilisateurs(); }
+  }));
+  document.querySelectorAll(".u-lien").forEach(s=>s.addEventListener("change",async e=>{
+    try{ const j=await appelAdmin({action:"lien",user_id:e.target.dataset.id,conseiller_id:e.target.value});
+      renderUtilisateurs(j.utilisateurs); uNotice("Périmètre mis à jour."); }
     catch(err){ uNotice(err.message,"err"); chargerUtilisateurs(); }
   }));
   document.querySelectorAll(".u-actif").forEach(b=>b.addEventListener("click",async e=>{
@@ -1319,30 +1605,45 @@ function renderUtilisateurs(rows){
 }
 
 async function chargerUtilisateurs(){
-  try{ const j=await appelAdmin({action:"liste"}); monUserId=j.moi||monUserId; renderUtilisateurs(j.utilisateurs||[]); }
+  try{
+    await chargerConseillersOptions();   // la colonne « Périmètre » en a besoin
+    const j=await appelAdmin({action:"liste"}); monUserId=j.moi||monUserId; renderUtilisateurs(j.utilisateurs||[]);
+  }
   catch(err){ uNotice(err.message,"err"); }
 }
 
 $("#u-creer").addEventListener("click",async ()=>{
-  const email=$("#u-email").value.trim().toLowerCase(), nom=$("#u-nom").value.trim(), role=$("#u-role").value;
-  if(!email){ uNotice("Renseigne une adresse e-mail.","err"); return; }
+  const email=adresseCompte($("#u-email").value), nom=$("#u-nom").value.trim(), role=$("#u-role").value;
+  const conseiller_id=role==="conseiller"?$("#u-conseiller").value:null;
+  const motdepasse=$("#u-mdp").value.trim();
+  if(!email){ uNotice("Renseigne une adresse e-mail (ou le seul identifiant de requête).","err"); return; }
+  if(role==="conseiller" && !conseiller_id){ uNotice("Choisis le conseiller à rattacher : sans lui, le compte ne verrait aucune réponse.","err"); return; }
+  // Contrôle en local pour ne pas faire l'aller-retour ; le serveur applique la
+  // même règle, c'est lui qui fait foi.
+  if(motdepasse && motdepasse.length<8){ uNotice("Mot de passe trop court : 8 caractères minimum.","err"); return; }
   $("#u-secret").innerHTML=""; uNotice("Création en cours…");
   try{
-    const j=await appelAdmin({action:"creer",email,nom,role});
-    uNotice(`Compte ${email} créé (${ROLE_LABELS[role]}).`);
-    // Le mot de passe provisoire n'est jamais stocké : affiché une seule fois.
-    $("#u-secret").innerHTML=`<div class="notice ok" style="margin-top:10px">Mot de passe provisoire, à transmettre puis à faire changer :
-      <span class="tag-mono" style="font-size:15px">${esc(j.motdepasse)}</span></div>`;
-    $("#u-email").value=""; $("#u-nom").value="";
+    const j=await appelAdmin({action:"creer",email,nom,role,conseiller_id,motdepasse});
+    uNotice(`Compte ${email} créé (${ROLE_LABELS[role]}${conseiller_id?` · ${conseiller_id}`:""}).`);
+    // Un mot de passe choisi n'est pas réaffiché (il est déjà connu, et le champ
+    // reste à l'écran) ; celui généré par le serveur ne l'est qu'une seule fois.
+    $("#u-secret").innerHTML=j.personnalise
+      ? `<div class="notice ok" style="margin-top:10px">Mot de passe choisi enregistré — à transmettre puis à faire changer.</div>`
+      : `<div class="notice ok" style="margin-top:10px">Mot de passe provisoire, à transmettre puis à faire changer :
+         <span class="tag-mono" style="font-size:15px">${esc(j.motdepasse)}</span></div>`;
+    $("#u-email").value=""; $("#u-nom").value=""; $("#u-conseiller").value=""; $("#u-mdp").value="";
     await chargerUtilisateurs();
   }catch(err){ uNotice(err.message,"err"); }
 });
 
 // Diffusion Brevo (appel authentifié à l'Edge Function).
 // Isolé de l'affichage pour que la reprise automatique puisse le rappeler.
+// `camp` vide = aucun paramètre de campagne transmis. La relance s'en sert : sans
+// campagne, la fonction relance toutes celles qui ont dépassé les 7 jours.
 async function appelDiffusion(camp,extra){
   const {data:{session}}=await sb.auth.getSession();
-  const res=await fetch(`${SB_URL}/functions/v1/envoi-sondage?campagne=${encodeURIComponent(camp)}${extra}`,
+  const qs=[camp?`campagne=${encodeURIComponent(camp)}`:"",(extra||"").replace(/^&/,"")].filter(Boolean).join("&");
+  const res=await fetch(`${SB_URL}/functions/v1/envoi-sondage${qs?"?"+qs:""}`,
     { headers:{ Authorization:`Bearer ${session.access_token}` } });
   const j=await res.json().catch(()=>({}));
   if(!res.ok || j.ok===false) throw new Error(j.error||`Échec de la diffusion (HTTP ${res.status}).`);
@@ -1382,6 +1683,64 @@ $("#d-campagne").addEventListener("change",e=>{
   clearInterval(progTimer); progTimer=null;
   if(e.target.value) majProgression(e.target.value).catch(()=>{});
 });
+
+// ====================== RELANCE J+7 DES NON-RÉPONDANTS ======================
+// La file est la vue `v_relances_a_faire` : elle porte la règle (7 jours écoulés,
+// aucune réponse depuis l'envoi, jamais relancé). L'app la COMPTE, elle ne la
+// recalcule pas — deux définitions du même délai finiraient par diverger, et le
+// nombre affiché ne correspondrait plus à ce qui part.
+let relTimer=null;
+const rlNotice=(m,k="ok")=>{ $("#rl-notice").innerHTML=`<div class="notice ${k}" style="margin-top:12px">${esc(m)}</div>`; };
+
+async function majRelances(){
+  const {count,error}=await sb.from("v_relances_a_faire").select("id",{count:"exact",head:true});
+  if(error){ $("#rl-count").innerHTML=`<span style="color:var(--bad)">${esc(error.message)}</span>`; throw error; }
+  const n=count??0;
+  $("#rl-count").innerHTML = n
+    ? `<b class="num">${n}</b> client${n>1?"s":""} sans réponse depuis plus de 7 jours, jamais relancé${n>1?"s":""}.`
+    : `Personne à relancer pour l'instant.`;
+  return n;
+}
+$("#rl-refresh").addEventListener("click",()=>majRelances().catch(()=>{}));
+
+// Les relances s'enchaînent en fond comme la diffusion : on rafraîchit le compte
+// jusqu'à ce qu'il se vide ou cesse de bouger, sans relancer quoi que ce soit
+// nous-mêmes (une reprise à l'aveugle sur cette file n'a pas de sens : chaque
+// ligne réservée est sortie de la file, il n'y a rien à rattraper).
+function suivreRelances(){
+  clearInterval(relTimer);
+  let dernier=-1, stagne=0;
+  relTimer=setInterval(async()=>{
+    let n; try{ n=await majRelances(); }catch{ return; }
+    if(n===dernier) stagne++; else { stagne=0; dernier=n; }
+    if(n===0 || stagne>=6){ clearInterval(relTimer); relTimer=null;
+      if(n===0) rlNotice("✓ Relances terminées : plus personne en attente."); }
+  },10000);
+}
+
+async function relancer(mode){
+  if(mode==="send"){
+    let n=0; try{ n=await majRelances(); }catch{ rlNotice("Impossible de compter la file.","err"); return; }
+    if(!n){ rlNotice("Aucune relance en attente.","err"); return; }
+    if(!confirm(`Envoyer un rappel à ${n} client(s) sans réponse depuis plus de 7 jours ?\n\nChacun ne peut le recevoir qu'une seule fois.`)) return;
+  }
+  rlNotice("Traitement…");
+  try{
+    // Pas de campagne transmise : la file est globale, le délai fait le tri.
+    const j=await appelDiffusion("", mode==="dry" ? "&relance=1&dry=1" : "&relance=1");
+    if(mode==="dry"){
+      rlNotice(`Aperçu : ${j.aTraiter??0} rappel(s) prêt(s) à partir. Aucun e-mail envoyé.`);
+      return;
+    }
+    rlNotice(j.suiteAutomatique
+      ? `${j.envoyes??0} rappel(s) envoyé(s), ${j.echecs??0} échec(s) — le reste du lot continue automatiquement.`
+      : `Relance terminée : ${j.envoyes??0} rappel(s) envoyé(s), ${j.echecs??0} échec(s).`);
+    await majRelances().catch(()=>{});
+    if(j.suiteAutomatique) suivreRelances();
+  }catch(err){ rlNotice(err.message,"err"); }
+}
+$("#rl-dry").addEventListener("click",()=>relancer("dry"));
+$("#rl-send").addEventListener("click",()=>relancer("send"));
 
 // go
 boot();

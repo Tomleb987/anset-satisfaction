@@ -1,13 +1,18 @@
 // =============================================================================
 // ANSET — Edge Function `envoi-sondage`  (réservée au super admin)
 // Accès : compte `super_admin` actif (JWT vérifié côté fonction, cf. « Authentification »)
-// ou clé service_role pour la relance interne. La clé publishable ne suffit PAS,
+// ou clé service_role pour les appels internes. La clé publishable ne suffit PAS,
 // et un compte `manager` non plus : la diffusion appartient à l'Administration.
 // -----------------------------------------------------------------------------
 // Envoie les invitations au sondage via le RELAIS SMTP Brevo, à partir de la
 // table `envois_sondage` (lignes statut_envoi='a_envoyer' de la campagne du mois).
 // Chaque invitation porte un LIEN PERSONNALISÉ (agence, conseiller, req, motif) →
 // réponse rattachée + lead pré-attribué.
+//
+// La même fonction porte la RELANCE J+7 (`?relance=1`) : même lien, même gabarit
+// d'e-mail, autre texte. Une seconde fonction aurait dupliqué l'authentification,
+// la mécanique SMTP, la parallélisation et la chaîne de passages — pour un seul
+// paragraphe de différence.
 //
 // POURQUOI SMTP ET PLUS L'API : Brevo bloque les appels API venant d'une IP
 // inconnue et l'IP de sortie des Edge Functions change à chaque invocation
@@ -18,7 +23,8 @@
 //   - pas de programmation H+2 (`scheduledAt` est une fonctionnalité de l'API) :
 //     l'envoi part immédiatement.
 //
-// Idempotent : une ligne passée à 'envoye' n'est jamais renvoyée.
+// Idempotent : une ligne passée à 'envoye' n'est jamais renvoyée, et une ligne
+// déjà relancée (`date_relance` non nulle) ne l'est jamais une seconde fois.
 //
 // UN SEUL CLIC SUFFIT, MÊME SUR UN GROS LOT : les envois sont parallélisés
 // (`concurrence` connexions SMTP), et si la fenêtre d'exécution de la fonction
@@ -32,14 +38,17 @@
 // production le 29/07/2026 avec des lots de 500. D'où deux parades : des lots
 // plus petits (LOT_DEFAUT), et la reprise déclenchée par le dashboard quand le
 // compteur ne bouge plus. Cette reprise pouvant chevaucher un passage encore
-// vivant, chaque ligne est RÉSERVÉE avant envoi (voir la boucle d'envoi).
+// vivant, chaque ligne est RÉSERVÉE avant envoi (voir `reserver`).
 //
 // Modes (query string) :
 //   (défaut)          envoie le lot 'a_envoyer' de la campagne courante
-//   ?campagne=YYYY-MM cible une campagne précise
+//   ?relance=1        rappel J+7 aux non-répondants (file = vue v_relances_a_faire)
+//   ?campagne=YYYY-MM cible une campagne précise. En relance, l'omettre est le cas
+//                     normal : la file est globale et le délai de 7 jours fait le tri.
 //   ?limit=N          plafonne le lot par passage (défaut 150, max 500)
 //   ?dry=1            simule : ne contacte pas Brevo, ne modifie rien
-//   ?test=a@b.pf      TEST : envoie 1 invitation à cette adresse, ne modifie rien
+//   ?test=a@b.pf      TEST : envoie 1 e-mail à cette adresse, ne modifie rien
+//                     (combinable avec ?relance=1 pour prévisualiser le rappel)
 //   ?chaine=N         usage interne : rang du passage dans la relance automatique
 //
 // Secrets/env : BREVO_SMTP_LOGIN, BREVO_SMTP_KEY, BREVO_SENDER_EMAIL,
@@ -52,7 +61,11 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import nodemailer from "npm:nodemailer@^9";
-import { SUJET, htmlInvitation, texteInvitation } from "./email.ts";
+import {
+  SUJET, SUJET_RELANCE,
+  htmlInvitation, htmlRelance,
+  texteInvitation, texteRelance,
+} from "./email.ts";
 
 const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") ?? "*";
 
@@ -113,13 +126,19 @@ Deno.serve(async (req: Request) => {
   const debut = Date.now();
   const url = new URL(req.url);
   const dry = url.searchParams.get("dry") === "1";
+  const relance = url.searchParams.get("relance") === "1";
   const testEmail = url.searchParams.get("test");
   const limit = Math.min(parseInt(url.searchParams.get("limit") ?? String(LOT_DEFAUT), 10) || LOT_DEFAUT, LOT_MAX);
   // Rang du passage courant dans la chaîne de relances automatiques (0 = appel du manager).
   const chaine = Math.max(parseInt(url.searchParams.get("chaine") ?? "0", 10) || 0, 0);
 
   const now = new Date();
-  const campagne = url.searchParams.get("campagne") ?? now.toISOString().slice(0, 7);
+  // Diffusion : pas de campagne = celle du mois, c'est le lot qu'on vient
+  // d'importer. Relance : pas de campagne = TOUTES, et c'est le cas normal — un
+  // lot parti le 28 doit se relancer le 4 du mois suivant, quand la « campagne
+  // courante » porte déjà un autre nom.
+  const campagneParam = url.searchParams.get("campagne");
+  const campagne = campagneParam ?? now.toISOString().slice(0, 7);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -151,8 +170,10 @@ Deno.serve(async (req: Request) => {
   // qui est publique par nature (elle est en clair dans satisfaction_anset.html).
   // Sans le contrôle ci-dessous, n'importe qui pourrait déclencher une diffusion ou
   // s'envoyer une invitation ANSET via ?test=. On exige donc :
-  //   - soit un utilisateur réellement connecté (le manager, depuis le dashboard),
-  //   - soit la clé service_role, réservée à la relance interne (voir `relancer`).
+  //   - soit un utilisateur réellement connecté (le super admin, depuis le dashboard),
+  //   - soit la clé service_role, réservée aux appels internes : la chaîne de
+  //     passages (`relancer`) et le cron quotidien de relance J+7
+  //     (`scripts/relance_j7_cron.sql`, clé rangée dans Vault).
   const bearer = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
   const interne = bearer.length > 0 && bearer === serviceRole;
   if (!interne) {
@@ -169,34 +190,54 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // Lot à traiter.
-  const { data: rows, error } = await supabase
-    .from("envois_sondage")
-    .select("id, req, email, prenom, nom, agence, conseiller_id, motif")
-    .eq("campagne", campagne)
-    .eq("statut_envoi", "a_envoyer")
-    .not("email", "is", null)
-    .limit(testEmail ? 1 : limit);
+  // --- Le lot à traiter. Deux sources, une seule mécanique en aval :
+  //   diffusion : la table, lignes 'a_envoyer' de la campagne visée ;
+  //   relance   : la vue `v_relances_a_faire`, qui PORTE la règle des 7 jours
+  //               (envoi parti depuis ≥ 7 j, aucune réponse postérieure à cet
+  //               envoi, jamais relancé). Le délai se change dans la migration
+  //               20260730120000 et nulle part ailleurs — la fonction et l'app
+  //               lisent cette file, elles ne la recalculent pas, sinon le nombre
+  //               affiché finit par ne plus correspondre à ce qui part.
+  const requete = relance
+    ? supabase.from("v_relances_a_faire")
+        .select("id, req, email, prenom, nom, agence, conseiller_id, motif")
+    : supabase.from("envois_sondage")
+        .select("id, req, email, prenom, nom, agence, conseiller_id, motif")
+        .eq("campagne", campagne)
+        .eq("statut_envoi", "a_envoyer")
+        .not("email", "is", null);
+  // En relance, cibler une campagne reste possible (diagnostic, rattrapage) mais
+  // n'est pas le mode d'emploi : sans paramètre, on prend toute la file.
+  if (relance && campagneParam) requete.eq("campagne", campagneParam);
+
+  const { data: rows, error } = await requete.limit(testEmail ? 1 : limit);
   if (error) return json({ ok: false, error: error.message }, 500);
   if (!rows || rows.length === 0) {
     // En test, l'absence de lot est un échec : le lien de test se construit à partir d'une ligne réelle.
     if (testEmail) {
       return json({
-        ok: false, test: true, campagne,
-        error: `Aucune ligne « à envoyer » pour la campagne ${campagne} : impossible de construire le lien de test. Importe un lot ou change de campagne.`,
+        ok: false, test: true, relance,
+        campagne: relance ? (campagneParam ?? "toutes") : campagne,
+        error: relance
+          ? "Personne à relancer pour l'instant : impossible de construire un rappel de test à partir d'une ligne réelle."
+          : `Aucune ligne « à envoyer » pour la campagne ${campagne} : impossible de construire le lien de test. Importe un lot ou change de campagne.`,
       }, 409);
     }
-    return json({ ok: true, campagne, traites: 0, message: "Aucun envoi 'a_envoyer'." });
+    return relance
+      ? json({ ok: true, relance: true, traites: 0, message: "Aucun client à relancer." })
+      : json({ ok: true, campagne, traites: 0, message: "Aucun envoi 'a_envoyer'." });
   }
 
   // --- Mode DRY : aperçu, aucune connexion SMTP, aucune écriture.
   if (dry) {
     if (testEmail) {
       const r = rows[0] as EnvoiRow;
-      return json({ ok: true, test: true, dry: true, to: testEmail, lien: lienPersonnalise(formUrl, r) });
+      return json({ ok: true, test: true, relance, dry: true, to: testEmail, lien: lienPersonnalise(formUrl, r) });
     }
     return json({
-      ok: true, dry: true, campagne, aTraiter: rows.length,
+      ok: true, dry: true, relance,
+      campagne: relance ? (campagneParam ?? "toutes") : campagne,
+      aTraiter: rows.length,
       apercu: (rows as EnvoiRow[]).slice(0, 5).map((r) => ({ email: r.email, prenom: r.prenom, lien: lienPersonnalise(formUrl, r) })),
     });
   }
@@ -222,7 +263,10 @@ Deno.serve(async (req: Request) => {
    */
   const relancer = async (rang: number) => {
     const suite = new URL(`${supabaseUrl}/functions/v1/envoi-sondage`);
-    suite.searchParams.set("campagne", campagne);
+    // Le passage suivant doit rester dans le même mode : sans ce report, une
+    // chaîne de rappels se transformerait en diffusion d'invitations neuves.
+    if (relance) suite.searchParams.set("relance", "1");
+    if (!relance || campagneParam) suite.searchParams.set("campagne", campagneParam ?? campagne);
     suite.searchParams.set("limit", String(limit));
     suite.searchParams.set("chaine", String(rang));
     const appel = fetch(suite.toString(), {
@@ -232,17 +276,58 @@ Deno.serve(async (req: Request) => {
     await Promise.race([appel, new Promise((r) => setTimeout(r, 1500))]);
   };
 
-  /** Envoie une invitation. Retourne l'erreur SMTP éventuelle. */
+  /** Envoie un e-mail : invitation, ou rappel J+7 selon le mode. */
   const envoyer = async (to: string, lien: string) => {
     await transport.sendMail({
-      from, to, subject: SUJET,
-      html: htmlInvitation(lien),
-      text: texteInvitation(lien),
+      from, to,
+      subject: relance ? SUJET_RELANCE : SUJET,
+      html: relance ? htmlRelance(lien) : htmlInvitation(lien),
+      text: relance ? texteRelance(lien) : texteInvitation(lien),
     });
   };
 
+  /**
+   * RÉSERVATION AVANT ENVOI, conditionnée à l'état qu'on a lu. Si un autre passage
+   * a déjà pris la ligne, la condition ne matche plus, rien n'est mis à jour et on
+   * la saute. C'est ce qui rend inoffensifs deux passages simultanés — la reprise
+   * lancée par le dashboard pendant qu'un passage de fond tourne encore, ou le
+   * cron de relance et un clic sur « Relancer » le même jour. Sans cela, le client
+   * reçoit deux e-mails et peut répondre deux fois.
+   *   diffusion : 'a_envoyer' → 'envoye' + date_envoi
+   *   relance   : date_relance null → maintenant. On NE TOUCHE PAS `statut_envoi` :
+   *               'envoye' est le dénominateur du taux de réponse, en sortir les
+   *               relancés ferait bondir le taux sans une réponse de plus.
+   * Retourne true si la ligne est à nous, false si un autre l'a prise ; lève sur
+   * erreur SQL.
+   */
+  const reserver = async (row: EnvoiRow): Promise<boolean> => {
+    const maintenant = new Date().toISOString();
+    const q = relance
+      ? supabase.from("envois_sondage")
+          .update({ date_relance: maintenant })
+          .eq("id", row.id).is("date_relance", null)
+      : supabase.from("envois_sondage")
+          .update({ statut_envoi: "envoye", date_envoi: maintenant })
+          .eq("id", row.id).eq("statut_envoi", "a_envoyer");
+    const { data, error } = await q.select("id");
+    if (error) throw new Error(error.message);
+    return !!data && data.length > 0;
+  };
+
+  /**
+   * Échec d'envoi : la ligne doit redevenir traitable, sinon le client est compté
+   * comme sollicité sans avoir rien reçu — et en relance il perdrait son unique
+   * rappel à cause d'une coupure SMTP. La libération d'une relance ne remet jamais
+   * en cause `statut_envoi` : l'invitation, elle, est bien partie.
+   */
+  const liberer = async (row: EnvoiRow) => {
+    await (relance
+      ? supabase.from("envois_sondage").update({ date_relance: null }).eq("id", row.id)
+      : supabase.from("envois_sondage").update({ statut_envoi: "a_envoyer", date_envoi: null }).eq("id", row.id));
+  };
+
   try {
-    // --- Mode TEST : une seule invitation à l'adresse fournie, rien n'est modifié.
+    // --- Mode TEST : un seul e-mail à l'adresse fournie, rien n'est modifié.
     if (testEmail) {
       const r = rows[0] as EnvoiRow;
       const lien = lienPersonnalise(formUrl, r);
@@ -250,13 +335,13 @@ Deno.serve(async (req: Request) => {
         await envoyer(testEmail, lien);
       } catch (e) {
         const detail = e instanceof Error ? e.message : String(e);
-        return json({ ok: false, test: true, to: testEmail, error: `Brevo (SMTP) a refusé l'envoi : ${detail}` }, 502);
+        return json({ ok: false, test: true, relance, to: testEmail, error: `Brevo (SMTP) a refusé l'envoi : ${detail}` }, 502);
       }
-      return json({ ok: true, test: true, to: testEmail, lien, transport: `${smtpHost}:${smtpPort}` });
+      return json({ ok: true, test: true, relance, to: testEmail, lien, transport: `${smtpHost}:${smtpPort}` });
     }
 
-    // --- Envoi réel : `concurrence` workers puisent dans le même lot, chaque
-    // ligne envoyée passe aussitôt à 'envoye' (reprise sans doublon possible).
+    // --- Envoi réel : `concurrence` workers puisent dans le même lot, chaque ligne
+    // est réservée puis envoyée (reprise sans doublon possible).
     const lot = rows as EnvoiRow[];
     let suivant = 0;
     let envoyes = 0;
@@ -273,27 +358,17 @@ Deno.serve(async (req: Request) => {
         const row = lot[i];
         const lien = lienPersonnalise(formUrl, row);
 
-        // RÉSERVATION AVANT ENVOI. On bascule la ligne en 'envoye' d'abord, avec la
-        // condition `statut_envoi='a_envoyer'` : si un autre passage l'a déjà prise,
-        // rien n'est mis à jour et on la saute. C'est ce qui rend inoffensive une
-        // reprise déclenchée pendant qu'un passage de fond tourne encore — sans
-        // cela, deux passages liraient la même ligne et le client recevrait deux
-        // invitations, donc pourrait répondre deux fois.
-        const { data: pris, error: ePris } = await supabase
-          .from("envois_sondage")
-          .update({ statut_envoi: "envoye", date_envoi: new Date().toISOString() })
-          .eq("id", row.id).eq("statut_envoi", "a_envoyer")
-          .select("id");
-        if (ePris) { erreurs.push({ id: row.id, email: row.email, erreur: ePris.message }); continue; }
-        if (!pris || pris.length === 0) continue; // déjà traitée par un autre passage
+        try {
+          if (!await reserver(row)) continue; // déjà prise par un autre passage
+        } catch (e) {
+          erreurs.push({ id: row.id, email: row.email, erreur: e instanceof Error ? e.message : String(e) });
+          continue;
+        }
 
         try {
           await envoyer(row.email!, lien);
         } catch (e) {
-          // Échec d'envoi : la ligne doit redevenir envoyable, sinon le client est
-          // compté comme sollicité sans avoir rien reçu.
-          await supabase.from("envois_sondage")
-            .update({ statut_envoi: "a_envoyer", date_envoi: null }).eq("id", row.id);
+          await liberer(row);
           erreurs.push({ id: row.id, email: row.email, erreur: e instanceof Error ? e.message : String(e) });
           continue;
         }
@@ -313,7 +388,9 @@ Deno.serve(async (req: Request) => {
 
     return json({
       ok: erreurs.length === 0,
-      campagne, envoyes, echecs: erreurs.length,
+      relance,
+      campagne: relance ? (campagneParam ?? "toutes") : campagne,
+      envoyes, echecs: erreurs.length,
       passage: chaine + 1,
       suiteAutomatique: suite,
       restants: Math.max(lot.length - traites, 0),

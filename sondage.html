@@ -132,9 +132,12 @@
   }
   textarea { min-height: 110px; resize: vertical; }
 
-  .consent { display: flex; gap: 12px; align-items: flex-start; padding: 16px; border: 1.5px solid var(--border); border-radius: var(--radius); background: var(--surface-2); cursor: pointer; }
-  .consent input { width: 22px; height: 22px; margin-top: 1px; accent-color: var(--blue); flex-shrink: 0; }
-  .consent label { font-size: 15px; line-height: 1.4; }
+  /* Mention d'information du consentement : affichée sous la question, avant le
+     choix. Discrète mais lisible (AA) — c'est elle qui rend l'opt-in « éclairé ». */
+  .consent-info { margin: 14px 0 0; padding: 14px 16px; border: 1.5px solid var(--border);
+    border-radius: var(--radius); background: var(--surface-2); color: var(--muted);
+    font-size: 13.5px; line-height: 1.5; }
+  .consent-info a { color: var(--blue); }
   .contact-fields { display: grid; gap: 10px; margin-top: 14px; }
   .contact-fields.hidden { display: none; }
 
@@ -257,18 +260,24 @@
       <div class="scalelbl"><span>Très insatisfait</span><span>Très satisfait</span></div>
     </section>
 
-    <!-- 4. Conseiller (si interaction) -->
+    <!-- 4. Conseiller (si interaction) — libellé adapté aux campagnes sinistre :
+         c'est un GESTIONNAIRE SINISTRE qui a traité le dossier, pas un conseiller
+         commercial. La note alimente `note_conseiller`, attribuée au même
+         `conseiller_id` que l'invitation (le gestionnaire du fichier sinistres). -->
     <section class="step" data-field="csat_conseiller" data-cond="interaction">
-      <h1 class="q">Votre conseiller ?</h1>
-      <p class="hint">Écoute, compétence, clarté — de 1 à 5.</p>
+      <h1 class="q" id="q-conseiller">Votre conseiller ?</h1>
+      <p class="hint" id="hint-conseiller">Écoute, compétence, clarté — de 1 à 5.</p>
       <div class="scale s5" data-field="csat_conseiller" data-type="scale" id="conseiller-scale"></div>
       <div class="scalelbl"><span>Très insatisfait</span><span>Très satisfait</span></div>
     </section>
 
-    <!-- 5. NPS (si interaction) -->
-    <section class="step" data-field="nps" data-cond="interaction">
+    <!-- 5. NPS — posé à TOUT LE MONDE, y compris sans interaction récente.
+         « Nous recommanderiez-vous ANSET ? » porte sur l'enseigne, pas sur un
+         contact du mois : le conditionner à l'interaction privait le NPS d'un tiers
+         des répondants (16 réponses sur 48 sur la campagne 2026-06). -->
+    <section class="step" data-field="nps">
       <h1 class="q">Nous recommanderiez-vous ANSET ?</h1>
-      <p class="hint">0 = pas du tout, 10 = tout à fait.</p>
+      <p class="hint" id="hint-nps">0 = pas du tout, 10 = tout à fait.</p>
       <div class="scale" data-field="nps" data-type="scale" id="nps-scale"></div>
       <div class="scalelbl"><span>Pas du tout</span><span>Tout à fait</span></div>
     </section>
@@ -299,14 +308,32 @@
       <textarea id="commentaire" data-field="commentaire" placeholder="Votre message…"></textarea>
     </section>
 
-    <!-- 9. Recontact + envoi -->
-    <section class="step" data-optional="true" data-role="recontact">
-      <h1 class="q">Souhaitez-vous être recontacté(e) ?</h1>
-      <p class="hint" id="recontact-hint">Uniquement si vous le souhaitez.</p>
-      <div class="consent" id="consent-box">
-        <input type="checkbox" id="consent" />
-        <label for="consent">J'accepte d'être recontacté(e) par un conseiller ANSET pour découvrir ses offres.</label>
+    <!-- 9. Consentement au recontact commercial (OPT-IN) + envoi.
+         Question à réponse OBLIGATOIRE, sans option pré-sélectionnée : le
+         consentement doit être libre, spécifique, éclairé et univoque, et
+         l'entreprise doit pouvoir PROUVER qu'elle l'a obtenu. Un refus est donc
+         une réponse à part entière — il est consigné au même titre qu'un accord
+         dans `registre_consentements`, ce qui prouve aussi qu'on a respecté le
+         « non ». Ne pas repasser cette étape en optionnelle : sans réponse, il n'y
+         a rien à consigner et l'opt-in n'est plus démontrable. -->
+    <section class="step" data-field="recontact" data-role="recontact">
+      <h1 class="q">Acceptez-vous d'être recontacté(e) par ANSET ?</h1>
+      <p class="hint" id="recontact-hint">Votre réponse ne change rien à la prise en compte de votre avis.</p>
+      <div class="opts" data-field="recontact" data-type="choice" data-bool="true">
+        <button class="opt" data-value="true">Oui, j'accepte</button>
+        <button class="opt" data-value="false">Non, merci</button>
       </div>
+      <!-- Finalité, base légale, durée et droits affichés AVANT le choix : c'est ce
+           qui rend le consentement « éclairé ». Ce texte est la version consignée au
+           registre — il doit rester synchronisé avec CONSENT_TEXTE / CONSENT_VERSION
+           dans `submit-sondage`. -->
+      <p class="consent-info" id="consent-info">
+        En répondant « oui », vous acceptez qu'un conseiller ANSET vous contacte par téléphone
+        ou par e-mail pour vous présenter ses offres d'assurance. Vos coordonnées ne servent
+        qu'à cela, ne sont jamais cédées à un tiers, sont conservées 12 mois au maximum, et
+        vous pouvez retirer votre accord à tout moment en écrivant à
+        <a href="mailto:dpo@anset.pf">dpo@anset.pf</a>.
+      </p>
       <div class="contact-fields hidden" id="contact-fields">
         <input type="text"  id="prenom"    placeholder="Prénom" autocomplete="given-name" />
         <input type="tel"   id="telephone" placeholder="Téléphone" autocomplete="tel" />
@@ -352,6 +379,13 @@ const SUBMIT_URL = "https://xizitftoejfxaizztzeu.supabase.co/functions/v1/submit
 // Motifs d'interaction (slugs alignés sur la base et le dashboard).
 const MOTIF_KEYS = ["souscription", "sinistre", "gestion", "reclamation", "information", "autre"];
 
+// Version de la mention d'information affichée à l'étape de consentement. Elle est
+// envoyée avec la réponse et consignée au registre : sans elle, on saurait qu'un
+// client a consenti mais pas À QUOI, et une évolution du texte rendrait les
+// consentements passés indémontrables. À incrémenter à CHAQUE modification du
+// paragraphe `#consent-info`, et à refléter dans `submit-sondage` (CONSENT_TEXTE).
+const CONSENT_VERSION = "2026-07-v1";
+
 // Paramètres du lien personnalisé.
 const params = new URLSearchParams(location.search);
 const urlAgence     = params.get("agence");
@@ -364,8 +398,12 @@ const motifFromUrl = (() => {
 })();
 
 // État des réponses.
+// `recontact` : décision d'opt-in commercial (true = accepte, false = refuse,
+// null = pas encore répondu). Distinct des autres champs : c'est la seule réponse
+// dont le REFUS doit être conservé (preuve du consentement, cf. registre).
 const answers = { interaction: null, agence: null, motif: null, sat_sinistre: null, delai_indemnisation: null,
-  csat_accueil: null, csat_conseiller: null, nps: null, csat_global: null, reseaux_sociaux: null, commentaire: null };
+  csat_accueil: null, csat_conseiller: null, nps: null, csat_global: null, reseaux_sociaux: null, commentaire: null,
+  recontact: null };
 
 // Si le motif vient du lien : interaction implicite (le client a bien eu un contact).
 if (motifFromUrl) { answers.motif = motifFromUrl; answers.interaction = true; }
@@ -429,14 +467,18 @@ document.querySelectorAll('[data-type="choice"]').forEach(group => {
 document.getElementById("agence").addEventListener("change", e => { answers.agence = e.target.value || null; updateNav(); });
 document.getElementById("commentaire").addEventListener("input", e => { answers.commentaire = e.target.value.trim() || null; });
 
-// Consentement → révèle les champs contact.
-const consent = document.getElementById("consent");
+// Les champs de contact n'apparaissent qu'après un « oui » : ne jamais afficher une
+// zone de saisie de coordonnées à quelqu'un qui vient de refuser le recontact.
 const contactFields = document.getElementById("contact-fields");
-document.getElementById("consent-box").addEventListener("click", e => {
-  if (e.target !== consent) consent.checked = !consent.checked;
-  contactFields.classList.toggle("hidden", !consent.checked);
-});
-consent.addEventListener("change", () => contactFields.classList.toggle("hidden", !consent.checked));
+// Libellés propres aux campagnes SINISTRE : le dossier a été traité par un
+// gestionnaire sinistre, jamais par un conseiller commercial. Poser « Votre
+// conseiller ? » à un client indemnisé lui fait noter quelqu'un qu'il n'a pas eu
+// au téléphone, et la note est de toute façon attribuée au gestionnaire.
+if (motifFromUrl === "sinistre") {
+  document.getElementById("q-conseiller").textContent = "Votre gestionnaire de sinistre ?";
+  document.getElementById("hint-conseiller").textContent =
+    "La personne qui a suivi votre dossier : écoute, clarté, disponibilité — de 1 à 5.";
+}
 
 // Astuce : mettre en avant le commentaire si note basse.
 function refreshCommentHint() {
@@ -501,11 +543,20 @@ function updateNav() {
   btnNext.disabled = !done;
   btnNext.textContent = pos === vis.length - 1 ? "Envoyer" : "Continuer";
   if (field === "commentaire") refreshCommentHint();
-  // Écran de recontact : message adapté selon qu'il y a eu ou non une interaction.
+  // Le NPS porte sur l'enseigne : sans contact récent, le dire explicitement, sinon
+  // le client croit qu'on lui demande de noter une visite qu'il n'a pas faite.
+  if (field === "nps") {
+    document.getElementById("hint-nps").textContent = answers.interaction === false
+      ? "Même sans contact récent, votre avis sur ANSET nous intéresse. 0 = pas du tout, 10 = tout à fait."
+      : "0 = pas du tout, 10 = tout à fait.";
+  }
+  // Étape de consentement : les champs de contact ne s'affichent qu'après un « oui »,
+  // et le message d'accroche s'adapte à l'absence d'interaction récente.
   if (current.dataset.role === "recontact") {
+    contactFields.classList.toggle("hidden", answers.recontact !== true);
     document.getElementById("recontact-hint").textContent = answers.interaction === false
-      ? "Pas d'interaction récente ? Laissez-nous vos coordonnées si vous souhaitez qu'un conseiller vous présente nos offres."
-      : "Uniquement si vous le souhaitez.";
+      ? "Vous n'avez pas eu de contact récent : souhaitez-vous qu'un conseiller vous présente nos offres ?"
+      : "Votre réponse ne change rien à la prise en compte de votre avis.";
   }
 }
 
@@ -538,9 +589,13 @@ async function submit() {
   const turnstileToken = tokenInput ? tokenInput.value : "";
   if (!turnstileToken) { errBox.textContent = "Merci de valider le contrôle anti-robot."; return; }
 
-  // Consentement : n'envoyer les coordonnées que si la case est cochée.
-  const consentOn = consent.checked;
+  // Consentement : n'envoyer les coordonnées que si le client a répondu « oui ».
+  // `consent_repondu` distingue un refus explicite d'une absence de réponse — le
+  // registre doit pouvoir consigner « a refusé », pas seulement « n'a pas accepté ».
+  const consentOn = answers.recontact === true;
   const payload = {
+    consent_repondu: answers.recontact !== null,
+    consent_version: CONSENT_VERSION,
     turnstileToken,
     interaction: answers.interaction,
     agence: answers.agence,

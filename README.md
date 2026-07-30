@@ -34,7 +34,7 @@ supabase/
     submit-sondage/index.ts                     # form -> Turnstile -> reponses_satisfaction + leads
     envoi-sondage/index.ts                       # envois_sondage -> SMTP Brevo (modes ?test / ?dry)
     envoi-sondage/email.ts                       # sujet + HTML de l'invitation (source de vérité)
-    admin-utilisateurs/index.ts                  # comptes d'accès (super admin only) : créer/rôle/désactiver
+    admin-utilisateurs/index.ts                  # comptes d'accès (super admin only) : créer/rôle/rattachement/désactiver
   migrations/
     20260723090200_base_schema.sql               # FONDATEUR : conseillers, reponses_satisfaction, leads, lead_notes, v_satisfaction_agence
     20260723090300_agences.sql                  # table agences (code -> nom/zone) + seed
@@ -44,7 +44,11 @@ supabase/
     20260724120000_motif_sinistre.sql            # motif + mesures sinistre + vue v_satisfaction_motif
     20260729120000_profils_utilisateurs.sql      # table profils (roles super_admin/manager) + amorçage
     20260729130000_admin_reserve_super_admin.sql # est_super_admin() + écritures envois/conseillers réservées
+    20260730100000_role_conseiller.sql           # rôle conseiller : profils.conseiller_id + RLS par périmètre
+    20260730120000_relance_j7.sql                # date_relance + vue v_relances_a_faire (file du rappel J+7)
 scripts/
+  creer_comptes.mjs                             # création en masse des comptes (managers nommés, reste en conseiller)
+  relance_j7_cron.sql                           # à jouer une fois : pg_cron quotidien qui déclenche la relance
   purge_rgpd.sql                                # cron mensuel de purge des leads sans_suite/ne_pas_contacter
   desactivation_surveymonkey.md                  # état + actions (aucun cron déployé)
 sondage.html                                    # formulaire public : interaction ? oui → agence, motif, [sinistre], accueil, conseiller, NPS, CSAT, réseaux sociaux, commentaire ; non → recontact direct. + Turnstile + RGPD
@@ -106,14 +110,66 @@ satisfaction_anset.html                          # app : Satisfaction · Prospec
    `thomas@anset.pf` qui est amorcé `super_admin`. Ensuite tout passe par l'onglet **Utilisateurs**.
 6. **Cron purge RGPD** : jouer `scripts/purge_rgpd.sql` (délai de conservation à valider).
 
+## Relance J+7 des non-répondants
+
+Un **seul** rappel par invitation, 7 jours après l'envoi, aux clients qui n'ont pas répondu.
+Mode `?relance=1` de `envoi-sondage`, bouton **Relancer** dans l'onglet Administration.
+
+- **La file est une vue**, `v_relances_a_faire` : envoi parti depuis ≥ 7 jours, jamais relancé,
+  et aucune réponse *postérieure à cet envoi*. La comparaison porte sur `date_reponse >= date_envoi`
+  et non sur la simple existence d'une réponse : un même `req` réapparaît d'une campagne à l'autre,
+  une réponse du mois dernier ne prouve rien sur l'invitation en cours. **Le délai se change là et
+  nulle part ailleurs** — l'app compte la file, elle ne la recalcule pas.
+- **Un rappel et pas deux** : `envois_sondage.date_relance` est posée *avant* l'envoi, sous condition
+  `date_relance is null`. Deux passages simultanés (le cron et un clic) ne peuvent pas doubler
+  l'e-mail ; un échec SMTP remet la date à null, jamais le statut d'envoi.
+- **Pas de statut `relance` dans l'enum** : `statut_envoi='envoye'` est le dénominateur du taux de
+  réponse. Sortir les relancés de ce compte ferait bondir le taux sans une réponse de plus.
+- **Périmètre global, pas mensuel** : sans `?campagne=`, la relance porte sur toutes les campagnes —
+  un lot parti le 28 se relance le 4 du mois suivant.
+- **Automatisation** : `scripts/relance_j7_cron.sql`, à jouer une fois dans le SQL Editor (pg_cron +
+  pg_net, clé `service_role` rangée dans Vault). Sans lui la relance reste manuelle — et un rappel
+  « à 7 jours » qui attend qu'on y pense n'en est pas un.
+
+L'e-mail de rappel a son propre sujet et son propre texte (`email.ts`), et annonce explicitement
+qu'il est le seul. Les deux e-mails partagent le même gabarit : les mentions RGPD ne vivent qu'à un
+seul endroit.
+
 ## Comptes et rôles
 
-Table `profils` (une ligne par compte `auth.users`), deux rôles :
+Table `profils` (une ligne par compte `auth.users`), trois rôles :
 
 | Rôle | Peut |
 |---|---|
-| `manager` | onglets **Satisfaction** et **Prospection** uniquement |
-| `super_admin` | idem + **Administration** (imports, diffusion) et **Utilisateurs** (créer un compte, changer un rôle, désactiver, supprimer) |
+| `conseiller` | onglets **Mes résultats** (ses seules réponses, avec le réseau en repère) et **Prospection** |
+| `manager` | onglets **Satisfaction** (réseau entier) et **Prospection** |
+| `super_admin` | idem manager + **Administration** (imports, diffusion) et **Utilisateurs** (créer un compte, changer un rôle, désactiver, supprimer) |
+
+### Le rôle `conseiller`
+
+L'identifiant est le **login de la requête mensuelle** (colonne « Gestionnaire », ex.
+`manon.marrocq`) : c'est déjà la clé de `conseillers.id` et la valeur portée par
+`reponses_satisfaction.conseiller_id`. Le compte auth utilise `<login>@anset.pf` — la page de
+connexion complète le domaine, un conseiller saisit son seul identifiant — mais le rattachement
+qui fait foi est `profils.conseiller_id`, pas l'adresse.
+
+Le cloisonnement est en base, pas à l'écran :
+
+- `reponses_satisfaction` et `envois_sondage` ne rendent à un conseiller que les lignes portant son
+  login (policies + `est_conseiller()` / `mon_conseiller_id()`, migration `20260730100000`). Toutes
+  les vues du dashboard étant en `security_invoker`, elles se réduisent d'elles-mêmes — y compris
+  pour un appel PostgREST depuis la console.
+- **Exception assumée** : `v_satisfaction_reseau` est passée en `security_invoker = off`. C'est un
+  agrégat par campagne, sans PII ni nom de collègue, et il sert de repère de comparaison sur
+  « Mes résultats ». Sans cette exception la vue « réseau » renverrait au conseiller ses propres
+  chiffres sous une étiquette réseau. **Ne jamais y ajouter de colonne nominative.**
+- **Prospection : un conseiller voit tous les leads**, comme un manager (décision métier) — la file
+  des leads non attribués doit rester prenable par n'importe qui.
+- L'onglet **Satisfaction** lui est retiré : agrégé sur ses seules lignes, il afficherait ses
+  chiffres sous des titres « réseau », « agence », « classement ».
+
+Création en masse (une cinquantaine de comptes) : `node scripts/creer_comptes.mjs --dry` puis sans
+`--dry`. Idempotent, il liste les managers nommément et crée tous les autres conseillers de la table.
 
 L'espace **Administration** est fermé au manager côté serveur, pas seulement masqué : les policies
 d'écriture de `envois_sondage` et `conseillers` exigent `public.est_super_admin()`, et `envoi-sondage`
@@ -122,7 +178,9 @@ depuis la console du navigateur.
 
 Créer un compte exige l'API admin de Supabase, donc la `service_role` : tout passe par l'Edge
 Function `admin-utilisateurs`, qui vérifie que l'appelant est `super_admin` **actif**. Le mot de passe
-provisoire est généré côté serveur et affiché une seule fois. Un compte désactivé est banni côté auth
+est soit **choisi** dans le formulaire (8 caractères minimum, jamais renvoyé par la fonction : il est
+déjà connu de l'appelant et n'a rien à faire dans les logs de la passerelle), soit **généré** côté
+serveur et affiché une seule fois. Un compte désactivé est banni côté auth
 (connexion refusée, `user_banned`), son historique reste intact. On ne peut ni se rétrograder, ni se
 désactiver, ni se supprimer soi-même, ni retirer le dernier super admin actif.
 
@@ -132,6 +190,8 @@ policy d'écriture** : un manager ne peut donc pas se promouvoir.
 ## Diagnostic
 
 - `envoi-sondage?dry=1` → aperçu du lot sans envoi. `?test=adresse@x.pf` → 1 invitation de test.
+- `envoi-sondage?relance=1` → rappel J+7 (`&dry=1` pour compter sans envoyer). File du moment :
+  `select count(*) from public.v_relances_a_faire;`
 - `?campagne=YYYY-MM` cible une campagne ; `?limit=N` plafonne le lot par passage.
 - Gros lot : la fonction parallélise puis **se relance elle-même** (`?chaine=N`) — un seul clic. Le
   compteur de l'onglet Administration lit l'avancement réel dans `envois_sondage`.

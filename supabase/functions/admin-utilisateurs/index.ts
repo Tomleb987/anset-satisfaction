@@ -13,15 +13,22 @@
 //
 // Actions (POST JSON) :
 //   {action:"liste"}                                  → tous les profils
-//   {action:"creer", email, nom, role}                → crée le compte, renvoie
+//   {action:"creer", email, nom, role, conseiller_id} → crée le compte, renvoie
 //                                                       un mot de passe provisoire
-//   {action:"role", user_id, role}                    → change le rôle
+//   {action:"role", user_id, role, conseiller_id}     → change le rôle
+//   {action:"lien", user_id, conseiller_id}           → change le conseiller lié
 //   {action:"actif", user_id, actif}                  → désactive / réactive
 //   {action:"supprimer", user_id}                      → supprime le compte
 //
 // Garde-fous : on ne peut ni se rétrograder, ni se désactiver, ni se supprimer
 // soi-même, ni retirer le dernier super admin (sinon plus personne ne gère les
 // comptes). Un compte désactivé est banni côté auth : il ne peut plus se connecter.
+//
+// Rôle `conseiller` : le compte est cantonné à ses propres réponses par la RLS
+// (`profils.conseiller_id` → `est_conseiller()` / `mon_conseiller_id()`). Un tel
+// compte SANS rattachement ne verrait plus rien : le lien est donc exigé ici, et
+// vérifié contre `conseillers` — le slug vient de la requête mensuelle (colonne
+// « Gestionnaire », ex. `manon.marrocq`), il ne se saisit pas au clavier.
 //
 // Env : SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (auto), ALLOWED_ORIGIN (optionnel).
 // =============================================================================
@@ -40,7 +47,7 @@ const CORS = {
 const json = (obj: unknown, status = 200) =>
   new Response(JSON.stringify(obj, null, 2), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
-const ROLES = ["super_admin", "manager"] as const;
+const ROLES = ["super_admin", "manager", "conseiller"] as const;
 
 /** Bannissement « à vie » : la durée maximale acceptée par l'API admin. */
 const BAN_LONG = "876000h"; // ~100 ans
@@ -97,10 +104,26 @@ Deno.serve(async (req: Request) => {
 
   const liste = async () => {
     const { data, error } = await supabase
-      .from("profils").select("user_id, email, nom, role, actif, created_at")
+      .from("profils").select("user_id, email, nom, role, actif, conseiller_id, created_at")
       .order("role", { ascending: true }).order("email", { ascending: true });
     if (error) return json({ ok: false, error: error.message }, 500);
     return json({ ok: true, moi, utilisateurs: data });
+  };
+
+  /**
+   * Rattachement d'un compte `conseiller` au slug de la requête. Renvoie soit le
+   * slug validé, soit un message d'erreur : un compte conseiller mal rattaché ne
+   * plante pas, il devient simplement aveugle (la RLS ne lui rend aucune ligne),
+   * ce qui se diagnostique très mal côté utilisateur. On refuse en amont.
+   */
+  const resoudreConseiller = async (role: string, brut: unknown): Promise<{ id: string | null } | { err: string }> => {
+    if (role !== "conseiller") return { id: null };   // un manager n'a pas de périmètre
+    const slug = String(brut ?? "").trim().toLowerCase();
+    if (!slug) return { err: "Choisis le conseiller (login de la requête, ex. manon.marrocq) auquel rattacher ce compte." };
+    const { data, error } = await supabase.from("conseillers").select("id").eq("id", slug).maybeSingle();
+    if (error) return { err: error.message };
+    if (!data) return { err: `Aucun conseiller « ${slug} » : ce login doit exister dans la requête importée (colonne Gestionnaire).` };
+    return { id: data.id };
   };
 
   switch (action) {
@@ -113,8 +136,16 @@ Deno.serve(async (req: Request) => {
       const role = String(corps.role ?? "manager");
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ ok: false, error: "Adresse e-mail invalide." }, 400);
       if (!ROLES.includes(role as typeof ROLES[number])) return json({ ok: false, error: "Rôle inconnu." }, 400);
+      const lien = await resoudreConseiller(role, corps.conseiller_id);
+      if ("err" in lien) return json({ ok: false, error: lien.err }, 400);
 
-      const motdepasse = motDePasseProvisoire();
+      // Mot de passe choisi par le super admin (utile pour un déploiement où l'on
+      // annonce le mot de passe de vive voix) ou généré à défaut. Le minimum de 8
+      // est le nôtre : celui de Supabase (6) laisse passer des mots de passe qu'on
+      // ne veut pas voir sur un compte donnant accès à des données clients.
+      const choisi = String(corps.motdepasse ?? "").trim();
+      if (choisi && choisi.length < 8) return json({ ok: false, error: "Mot de passe trop court : 8 caractères minimum." }, 400);
+      const motdepasse = choisi || motDePasseProvisoire();
       // email_confirm : pas d'e-mail de validation à envoyer, le compte est
       // utilisable immédiatement avec le mot de passe provisoire.
       const { data: cree, error: eCreate } = await supabase.auth.admin.createUser({
@@ -126,14 +157,22 @@ Deno.serve(async (req: Request) => {
       }
 
       const { error: eIns } = await supabase.from("profils")
-        .insert({ user_id: cree.user.id, email, nom, role });
+        .insert({ user_id: cree.user.id, email, nom, role, conseiller_id: lien.id });
       if (eIns) {
         // Profil manquant = compte inutilisable : on annule la création plutôt
         // que de laisser un utilisateur auth orphelin.
         await supabase.auth.admin.deleteUser(cree.user.id);
         return json({ ok: false, error: `Profil non créé (${eIns.message}) — compte annulé.` }, 500);
       }
-      return json({ ok: true, cree: { user_id: cree.user.id, email, nom, role }, motdepasse });
+      // Un mot de passe choisi n'est pas renvoyé : l'appelant le connaît déjà, et
+      // le réécrire dans la réponse (donc dans les logs de la passerelle) n'a
+      // aucun intérêt. Seul celui généré ici doit être affiché, une fois.
+      return json({
+        ok: true,
+        cree: { user_id: cree.user.id, email, nom, role, conseiller_id: lien.id },
+        motdepasse: choisi ? null : motdepasse,
+        personnalise: !!choisi,
+      });
     }
 
     case "role": {
@@ -141,11 +180,32 @@ Deno.serve(async (req: Request) => {
       const role = String(corps.role ?? "");
       if (!ROLES.includes(role as typeof ROLES[number])) return json({ ok: false, error: "Rôle inconnu." }, 400);
       if (user_id === moi) return json({ ok: false, error: "Change ton propre rôle depuis un autre compte super admin." }, 400);
+      const { data: cible } = await supabase.from("profils").select("role, email, conseiller_id").eq("user_id", user_id).maybeSingle();
       if (role !== "super_admin" && await superAdminsActifs() <= 1) {
-        const { data: cible } = await supabase.from("profils").select("role").eq("user_id", user_id).maybeSingle();
         if (cible?.role === "super_admin") return json({ ok: false, error: "Il doit rester au moins un super administrateur." }, 400);
       }
-      const { error } = await supabase.from("profils").update({ role }).eq("user_id", user_id);
+      // Passage en conseiller sans slug explicite : on retombe sur la convention
+      // d'adresse (`manon.marrocq@anset.pf` → `manon.marrocq`), qui est justement
+      // le login de la requête. Si elle ne correspond à personne, on refuse au
+      // lieu de créer un compte aveugle.
+      const slugImplicite = String(cible?.email ?? "").split("@")[0];
+      const lien = await resoudreConseiller(role, corps.conseiller_id ?? cible?.conseiller_id ?? slugImplicite);
+      if ("err" in lien) return json({ ok: false, error: lien.err }, 400);
+      const { error } = await supabase.from("profils").update({ role, conseiller_id: lien.id }).eq("user_id", user_id);
+      if (error) return json({ ok: false, error: error.message }, 500);
+      return await liste();
+    }
+
+    // Changer le conseiller rattaché sans toucher au rôle (erreur de saisie,
+    // changement de portefeuille).
+    case "lien": {
+      const user_id = String(corps.user_id ?? "");
+      const { data: cible } = await supabase.from("profils").select("role").eq("user_id", user_id).maybeSingle();
+      if (!cible) return json({ ok: false, error: "Compte introuvable." }, 404);
+      if (cible.role !== "conseiller") return json({ ok: false, error: "Seul un compte conseiller se rattache à un login de requête." }, 400);
+      const lien = await resoudreConseiller("conseiller", corps.conseiller_id);
+      if ("err" in lien) return json({ ok: false, error: lien.err }, 400);
+      const { error } = await supabase.from("profils").update({ conseiller_id: lien.id }).eq("user_id", user_id);
       if (error) return json({ ok: false, error: error.message }, 500);
       return await liste();
     }

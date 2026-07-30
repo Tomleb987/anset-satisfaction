@@ -3,8 +3,10 @@
 // -----------------------------------------------------------------------------
 // Reçoit la soumission du formulaire HTML public, vérifie l'anti-spam Turnstile
 // côté serveur, puis écrit via service_role dans :
-//   - reponses_satisfaction : TOUJOURS
-//   - leads                 : si consentement + (téléphone ou email)
+//   - reponses_satisfaction   : TOUJOURS
+//   - registre_consentements  : dès que le client a RÉPONDU à la question d'opt-in,
+//                               qu'il accepte ou qu'il refuse (preuve du consentement)
+//   - leads                   : si consentement + (téléphone ou email)
 //
 // Aucune insertion anonyme directe : seule la service_role écrit (bypass RLS).
 // Les policies RLS `authenticated` existantes restent inchangées.
@@ -16,6 +18,21 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") ?? "*";
+
+// Mention d'information affichée au client à l'étape de consentement. SOURCE DE
+// VÉRITÉ pour le registre : on consigne le texte que le serveur connaît, pas celui
+// que le navigateur prétend avoir affiché — un client malveillant pourrait sinon
+// faire écrire n'importe quoi dans un registre de preuve. Le formulaire envoie sa
+// version (`consent_version`) : si elle diffère de celle ci-dessous, la ligne est
+// consignée avec la version REÇUE et le texte marqué comme non résolu, ce qui rend
+// la désynchronisation visible au lieu de la maquiller.
+// À modifier EN MÊME TEMPS que le paragraphe `#consent-info` de `sondage.html`.
+const CONSENT_VERSION = "2026-07-v1";
+const CONSENT_TEXTE =
+  "En répondant « oui », vous acceptez qu'un conseiller ANSET vous contacte par téléphone " +
+  "ou par e-mail pour vous présenter ses offres d'assurance. Vos coordonnées ne servent " +
+  "qu'à cela, ne sont jamais cédées à un tiers, sont conservées 12 mois au maximum, et " +
+  "vous pouvez retirer votre accord à tout moment en écrivant à dpo@anset.pf.";
 
 const CORS = {
   "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
@@ -196,7 +213,47 @@ Deno.serve(async (req: Request) => {
       );
     if (eSat) throw new Error("reponses_satisfaction: " + eSat.message);
 
-    // 4) leads — seulement si consentement ET au moins un moyen de contact.
+    // 4) registre_consentements — dès que la question d'opt-in a reçu une RÉPONSE.
+    // Un refus vaut preuve autant qu'un accord : il démontre qu'on a demandé et
+    // qu'un rappel commercial serait une faute. Écrit AVANT `leads` pour que la
+    // preuve existe même si la création du lead échoue ensuite.
+    // Une soumission sans réponse à la question (ancienne version du formulaire en
+    // cache chez le client) ne produit PAS de ligne : il n'y aurait rien à prouver.
+    const consentRepondu = body.consent_repondu === undefined
+      ? body.consent !== undefined   // tolère l'ancien formulaire, qui n'envoyait que `consent`
+      : toBool(body.consent_repondu);
+    if (consentRepondu) {
+      const versionRecue = trimOrNull(body.consent_version) ?? "inconnue";
+      const texte = versionRecue === CONSENT_VERSION
+        ? CONSENT_TEXTE
+        : `[version non reconnue par le serveur : ${versionRecue}] ${CONSENT_TEXTE}`;
+      const { error: eReg } = await supabase
+        .from("registre_consentements")
+        .upsert(
+          {
+            response_id,
+            consenti: consent,
+            date_decision: now,
+            finalite: "prospection_commerciale",
+            texte_presente: texte,
+            version_texte: versionRecue,
+            canal: "formulaire_web",
+            campagne,
+            req: req_param,
+            motif,
+            // Présence des moyens de contact, jamais leur valeur : le registre
+            // prouve un consentement, il ne duplique pas les coordonnées.
+            a_donne_tel: !!telephone,
+            a_donne_email: !!email,
+          },
+          { onConflict: "response_id", ignoreDuplicates: true },
+        );
+      // Un registre de preuve qui échoue silencieusement ne prouve rien : on
+      // remonte l'erreur comme pour les autres écritures.
+      if (eReg) throw new Error("registre_consentements: " + eReg.message);
+    }
+
+    // 5) leads — seulement si consentement ET au moins un moyen de contact.
     let leadCree = false;
     if (consent && (telephone || email)) {
       // Le lead a une FK conseillers.id : ne garder l'attribution que si le slug existe.
