@@ -471,6 +471,10 @@
         <button class="btn" id="rl-send">Relancer</button>
       </div>
       <div id="rl-count" class="sub" style="margin-top:12px">—</div>
+      <!-- Dernier passage du cron. Sans cette ligne, un rappel « automatique » qui ne
+           partirait plus ne se verrait nulle part : la relance est justement le seul
+           écran dont personne n'attend une réponse. -->
+      <div id="rl-cron" class="sub" style="margin-top:6px">—</div>
       <div id="rl-notice"></div>
     </div>
   </section>
@@ -699,7 +703,8 @@ $("#tabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(
     // État de la diffusion et de la file de relance visibles dès l'ouverture de
     // l'onglet, sans rien lancer.
     majProgression($("#d-campagne").value).catch(()=>{});
-    majRelances().catch(()=>{}); }
+    majRelances().catch(()=>{});
+    majJournalRelance(); }
 });
 
 // ============================ DASHBOARD ============================
@@ -1701,7 +1706,37 @@ async function majRelances(){
     : `Personne à relancer pour l'instant.`;
   return n;
 }
-$("#rl-refresh").addEventListener("click",()=>majRelances().catch(()=>{}));
+// Dernier passage de relance, lu dans `journal_relances`. Ce que l'on surveille est
+// la FRAÎCHEUR, pas le contenu : une panne d'authentification (clé tournée, 401)
+// n'atteint jamais l'Edge Function et ne peut donc écrire nulle part. C'est
+// l'absence de ligne récente qui la révèle — d'où le seuil ci-dessous.
+// 25 h et non 24 : le cron passe à heure fixe, un contrôle à exactement 24 h
+// clignoterait en rouge quelques minutes chaque jour pour rien.
+const RELANCE_PERIME_H = 25;
+async function majJournalRelance(){
+  const c=$("#rl-cron");
+  const {data,error}=await sb.from("journal_relances")
+    .select("debut, source, passage, envoyes, echecs, message")
+    .order("debut",{ascending:false}).limit(1).maybeSingle();
+  // Ni panne ni alerte : un super admin qui n'a jamais lancé de relance n'a
+  // simplement pas encore de journal.
+  if(error){ c.innerHTML=`<span style="color:var(--bad)">Journal des relances illisible : ${esc(error.message)}</span>`; return; }
+  if(!data){ c.textContent="Aucun passage de relance enregistré pour l'instant."; return; }
+  const d=new Date(data.debut), heures=(Date.now()-d.getTime())/36e5;
+  const quand=d.toLocaleString("fr-FR",{dateStyle:"short",timeStyle:"short"});
+  const qui={cron:"automatique",app:"manuel",chaine:"suite de lot"}[data.source]??esc(data.source);
+  const bilan=data.envoyes||data.echecs
+    ? `${data.envoyes} rappel${data.envoyes>1?"s":""} envoyé${data.envoyes>1?"s":""}${data.echecs?`, <b style="color:var(--bad)">${data.echecs} échec${data.echecs>1?"s":""}</b>`:""}`
+    : "aucun client à relancer ce jour-là";
+  const corps=`Dernier passage <b>${quand}</b> (${qui}) — ${bilan}.`;
+  // Le cron est quotidien : au-delà du seuil, c'est lui qui ne tourne plus. On le
+  // dit, plutôt que d'afficher une date ancienne comme si tout allait bien.
+  c.innerHTML = heures>RELANCE_PERIME_H
+    ? `<span style="color:var(--bad)">⚠ ${corps} Soit plus de ${Math.floor(heures/24)} jour(s) : le rappel automatique ne tourne plus.</span>`
+    : corps + (data.echecs&&data.message?`<br><span class="sub">${esc(data.message)}</span>`:"");
+}
+
+$("#rl-refresh").addEventListener("click",()=>{ majRelances().catch(()=>{}); majJournalRelance(); });
 
 // Les relances s'enchaînent en fond comme la diffusion : on rafraîchit le compte
 // jusqu'à ce qu'il se vide ou cesse de bouger, sans relancer quoi que ce soit
@@ -1736,6 +1771,7 @@ async function relancer(mode){
       ? `${j.envoyes??0} rappel(s) envoyé(s), ${j.echecs??0} échec(s) — le reste du lot continue automatiquement.`
       : `Relance terminée : ${j.envoyes??0} rappel(s) envoyé(s), ${j.echecs??0} échec(s).`);
     await majRelances().catch(()=>{});
+    majJournalRelance();
     if(j.suiteAutomatique) suivreRelances();
   }catch(err){ rlNotice(err.message,"err"); }
 }

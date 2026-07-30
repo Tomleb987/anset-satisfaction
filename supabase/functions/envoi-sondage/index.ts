@@ -1,8 +1,9 @@
 // =============================================================================
 // ANSET — Edge Function `envoi-sondage`  (réservée au super admin)
-// Accès : compte `super_admin` actif (JWT vérifié côté fonction, cf. « Authentification »)
-// ou clé service_role pour les appels internes. La clé publishable ne suffit PAS,
-// et un compte `manager` non plus : la diffusion appartient à l'Administration.
+// Accès : compte `super_admin` actif (JWT vérifié côté fonction, cf. « Authentification »),
+// clé service_role pour la chaîne de passages, ou en-tête `x-anset-cron` pour le cron
+// de relance. La clé publishable ne suffit PAS, et un compte `manager` non plus :
+// la diffusion appartient à l'Administration.
 // -----------------------------------------------------------------------------
 // Envoie les invitations au sondage via le RELAIS SMTP Brevo, à partir de la
 // table `envois_sondage` (lignes statut_envoi='a_envoyer' de la campagne du mois).
@@ -51,9 +52,15 @@
 //                     (combinable avec ?relance=1 pour prévisualiser le rappel)
 //   ?chaine=N         usage interne : rang du passage dans la relance automatique
 //
+// Chaque passage de RELANCE écrit son compte-rendu dans `journal_relances` — même
+// les jours sans personne à relancer. C'est la fraîcheur de la dernière ligne qui
+// dit à l'app que le cron tourne : une panne d'authentification n'atteint jamais la
+// fonction et ne peut donc laisser aucune trace ailleurs.
+//
 // Secrets/env : BREVO_SMTP_LOGIN, BREVO_SMTP_KEY, BREVO_SENDER_EMAIL,
 //               BREVO_SENDER_NAME (optionnel, défaut "ANSET"), FORM_URL,
-//               SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (auto).
+//               SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (auto),
+//               CRON_SECRET (secret du cron de relance, cf. scripts/relance_j7_cron.sql).
 // Env optionnels : BREVO_SMTP_HOST (défaut smtp-relay.brevo.com),
 //                  BREVO_SMTP_PORT (défaut 587), BREVO_SMTP_CONCURRENCE (défaut 4),
 //                  ALLOWED_ORIGIN (défaut "*").
@@ -92,6 +99,19 @@ const LOT_MAX = 500;
 
 const json = (obj: unknown, status = 200) =>
   new Response(JSON.stringify(obj, null, 2), { status, headers: { ...CORS, "Content-Type": "application/json" } });
+
+/**
+ * Comparaison de secrets à durée constante. Un `===` sort au premier caractère
+ * différent : le temps de réponse laisse alors deviner le secret caractère par
+ * caractère. On accepte de divulguer la LONGUEUR (sortie immédiate si elle
+ * diffère), ce qui n'aide personne face à un secret tiré au hasard.
+ */
+const egalConstant = (a: string, b: string): boolean => {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+};
 
 interface EnvoiRow {
   id: string;
@@ -174,8 +194,22 @@ Deno.serve(async (req: Request) => {
   //   - soit la clé service_role, réservée aux appels internes : la chaîne de
   //     passages (`relancer`) et le cron quotidien de relance J+7
   //     (`scripts/relance_j7_cron.sql`, clé rangée dans Vault).
+  //   - soit l'en-tête `x-anset-cron`, secret propre au cron (voir plus bas).
   const bearer = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
-  const interne = bearer.length > 0 && bearer === serviceRole;
+  // POURQUOI UN SECRET À PART POUR LE CRON. Comparer le bearer à
+  // SUPABASE_SERVICE_ROLE_KEY oblige l'appelant à connaître cette clé mot pour mot,
+  // et le 30/07/2026 le passage du projet aux nouvelles clés d'API a changé sa
+  // valeur sous les pieds du cron : 401 chaque nuit, sans un envoi. `CRON_SECRET`
+  // ne dépend d'aucune rotation, et sa fuite ne permet que de DÉCLENCHER une
+  // relance — pas de lire la base. La chaîne de passages, elle, continue de
+  // s'authentifier par la clé de service : la fonction se compare à sa propre
+  // variable d'environnement, il n'y a rien à synchroniser.
+  // `.trim()` sur la clé d'environnement : un saut de ligne collé dans le champ
+  // secret est invisible dans l'UI et ferait échouer la comparaison.
+  const cronSecret = Deno.env.get("CRON_SECRET")?.trim();
+  const enteteCron = (req.headers.get("x-anset-cron") ?? "").trim();
+  const parCron = !!cronSecret && enteteCron.length > 0 && egalConstant(enteteCron, cronSecret);
+  const interne = parCron || (bearer.length > 0 && bearer === serviceRole.trim());
   if (!interne) {
     const { data: auth, error: eAuth } = await supabase.auth.getUser(bearer);
     if (eAuth || !auth?.user) {
@@ -189,6 +223,34 @@ Deno.serve(async (req: Request) => {
       return json({ ok: false, error: "Réservé au super administrateur." }, 403);
     }
   }
+
+  /**
+   * Compte-rendu du passage dans `journal_relances`. C'est le seul endroit d'où
+   * l'app apprend que la relance tourne : `cron.job_run_details` affiche
+   * « succeeded » même quand la fonction a répondu 401, et `net._http_response`
+   * est purgé au bout de quelques heures.
+   *
+   * ÉCRIT MÊME QUAND IL N'Y A PERSONNE À RELANCER — c'est tout l'intérêt. Le
+   * signal d'alerte côté app est la FRAÎCHEUR de la dernière ligne ; sans ligne
+   * les jours creux, un cron mort ressemblerait à un jour sans file.
+   *
+   * Ne journalise que la relance : la progression d'une diffusion se lit déjà dans
+   * `envois_sondage`. Ni en `dry`, ni en `test` — ce ne sont pas des passages.
+   * N'échoue jamais bruyamment : perdre la supervision ne doit pas empêcher un
+   * rappel de partir.
+   */
+  const journaliser = async (compte: { envoyes?: number; echecs?: number; message?: string | null }) => {
+    if (!relance || dry || testEmail) return;
+    try {
+      await supabase.from("journal_relances").insert({
+        source: chaine > 0 ? "chaine" : parCron ? "cron" : "app",
+        passage: chaine + 1,
+        envoyes: compte.envoyes ?? 0,
+        echecs: compte.echecs ?? 0,
+        message: compte.message ?? null,
+      });
+    } catch { /* supervision dégradée, envoi intact */ }
+  };
 
   // --- Le lot à traiter. Deux sources, une seule mécanique en aval :
   //   diffusion : la table, lignes 'a_envoyer' de la campagne visée ;
@@ -211,7 +273,12 @@ Deno.serve(async (req: Request) => {
   if (relance && campagneParam) requete.eq("campagne", campagneParam);
 
   const { data: rows, error } = await requete.limit(testEmail ? 1 : limit);
-  if (error) return json({ ok: false, error: error.message }, 500);
+  if (error) {
+    // Cas typique : la vue `v_relances_a_faire` absente ou renommée. Sans cette
+    // trace, la panne serait muette — le cron n'a personne à qui se plaindre.
+    await journaliser({ message: `Lecture de la file impossible : ${error.message}` });
+    return json({ ok: false, error: error.message }, 500);
+  }
   if (!rows || rows.length === 0) {
     // En test, l'absence de lot est un échec : le lien de test se construit à partir d'une ligne réelle.
     if (testEmail) {
@@ -223,9 +290,11 @@ Deno.serve(async (req: Request) => {
           : `Aucune ligne « à envoyer » pour la campagne ${campagne} : impossible de construire le lien de test. Importe un lot ou change de campagne.`,
       }, 409);
     }
-    return relance
-      ? json({ ok: true, relance: true, traites: 0, message: "Aucun client à relancer." })
-      : json({ ok: true, campagne, traites: 0, message: "Aucun envoi 'a_envoyer'." });
+    if (relance) {
+      await journaliser({ message: "Aucun client à relancer." });
+      return json({ ok: true, relance: true, traites: 0, message: "Aucun client à relancer." });
+    }
+    return json({ ok: true, campagne, traites: 0, message: "Aucun envoi 'a_envoyer'." });
   }
 
   // --- Mode DRY : aperçu, aucune connexion SMTP, aucune écriture.
@@ -385,6 +454,16 @@ Deno.serve(async (req: Request) => {
     // (adresse morte) ne peut pas déclencher une boucle sans fin.
     const suite = resteDuTravail && envoyes > 0 && chaine < CHAINE_MAX;
     if (suite) await relancer(chaine + 1);
+
+    await journaliser({
+      envoyes,
+      echecs: erreurs.length,
+      // Le premier échec suffit : les 3 200 lignes d'un lot partagent presque
+      // toujours la même cause (relais SMTP, quota, identifiants).
+      message: erreurs.length
+        ? `Premier échec : ${String((erreurs[0] as { erreur: unknown }).erreur).slice(0, 300)}`
+        : suite ? "Passage terminé, la suite du lot continue." : null,
+    });
 
     return json({
       ok: erreurs.length === 0,
