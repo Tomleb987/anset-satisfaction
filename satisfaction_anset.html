@@ -57,6 +57,11 @@
     border:1px solid var(--border); border-radius:10px; padding:11px 13px; font:inherit; font-size:14px;}
   #gate button{width:100%; background:var(--grad); color:#fff; border:0; border-radius:10px;
     padding:12px; font:inherit; font-size:14px; font-weight:700; cursor:pointer;}
+  /* Action secondaire : elle doit rester lisible sans concurrencer « Se connecter »,
+     qui est le geste attendu dans 99 % des cas. D'où un lien, pas un second bouton. */
+  #gate button.lien{background:none; color:var(--muted); font-weight:600; font-size:13px;
+    padding:10px 0 0; text-decoration:underline; text-underline-offset:3px;}
+  #gate button.lien:hover{color:var(--ciel);}
 
   #app{display:none; max-width:1180px; margin:0 auto; padding:22px 22px 60px;}
   .appbar{display:flex; align-items:center; gap:16px; margin-bottom:22px; padding-bottom:16px;
@@ -217,6 +222,22 @@
     <input type="text" id="gate-email" placeholder="Identifiant ou e-mail" autocomplete="username" inputmode="email" />
     <input type="password" id="gate-pass" placeholder="Mot de passe" autocomplete="current-password" />
     <button id="gate-btn">Se connecter</button>
+    <!-- Libre-service : sans lui, un mot de passe oublié demandait au super admin de
+         supprimer puis recréer le compte — la seule voie qui existait. -->
+    <button id="gate-oubli" class="lien">Mot de passe oublié&nbsp;?</button>
+  </div>
+
+  <!-- Deuxième écran du même bloc : atteint par le lien reçu par e-mail, qui porte
+       le jeton dans le FRAGMENT (#recuperation=…). Un fragment n'est pas transmis au
+       serveur, donc le jeton n'apparaît ni dans les logs d'accès ni dans un Referer. -->
+  <div class="box" id="gate-nouveau" hidden>
+    <div class="logo">A</div>
+    <h1>Nouveau mot de passe</h1>
+    <p>Choisissez un mot de passe de 8&nbsp;caractères minimum.</p>
+    <div id="rec-err"></div>
+    <input type="password" id="rec-mdp" placeholder="Nouveau mot de passe" autocomplete="new-password" />
+    <input type="password" id="rec-mdp2" placeholder="Confirmer le mot de passe" autocomplete="new-password" />
+    <button id="rec-btn">Enregistrer</button>
   </div>
 </div>
 
@@ -667,7 +688,15 @@ function initCible(){
   });
   $("#nps-trend-sub").textContent=`Par campagne · ligne pointillée = objectif ${CIBLE_NPS>0?"+":""}${CIBLE_NPS}`;
 }
-async function boot(){ initCible(); const {data}=await sb.auth.getSession(); await setAuth(!!data.session, data.session?.user?.email); }
+async function boot(){
+  initCible();
+  // Un lien de réinitialisation prime sur tout le reste, y compris sur une session
+  // encore valable : la personne peut arriver depuis un poste où quelqu'un d'autre
+  // est resté connecté, et son intention est sans ambiguïté.
+  if(jetonRecuperation()){ ecranRecuperation(); return; }
+  const {data}=await sb.auth.getSession();
+  await setAuth(!!data.session, data.session?.user?.email);
+}
 // Le rôle est appliqué AVANT le chargement : il décide de l'onglet d'atterrissage
 // et de l'écran à peindre (un conseiller n'a pas de dashboard réseau à remplir).
 async function setAuth(logged,email){
@@ -685,6 +714,69 @@ $("#gate-btn").addEventListener("click", async ()=>{
   await setAuth(true,data.user?.email);
 });
 $("#gate-pass").addEventListener("keydown",e=>{ if(e.key==="Enter")$("#gate-btn").click(); });
+
+// ================== MOT DE PASSE OUBLIÉ (libre-service) ==================
+// Tout le durcissement est côté serveur (`mot-de-passe-oublie`) : jeton haché à
+// usage unique, débit limité par compte, et surtout RÉPONSE NEUTRE — l'app ne sait
+// donc pas si le compte existe, et n'a rien à en dire. Ne jamais « améliorer » ce
+// message en distinguant les cas : ce serait rendre l'endpoint bavard sur qui
+// travaille chez ANSET.
+const URL_OUBLI=`${SB_URL}/functions/v1/mot-de-passe-oublie`;
+async function appelOubli(charge){
+  const r=await fetch(URL_OUBLI,{ method:"POST",
+    headers:{ "Content-Type":"application/json", apikey:SB_ANON, Authorization:`Bearer ${SB_ANON}` },
+    body:JSON.stringify(charge) });
+  let j=null; try{ j=await r.json(); }catch{}
+  if(!j) throw new Error("Réponse illisible du serveur.");
+  if(!r.ok||j.ok===false) throw new Error(j.error||`Erreur ${r.status}`);
+  return j;
+}
+
+$("#gate-oubli").addEventListener("click", async ()=>{
+  // On réutilise l'identifiant déjà saisi : le demander deux fois n'apporte rien.
+  const saisi=$("#gate-email").value.trim()
+    || prompt("Votre identifiant (ex. hina.sansine) ou votre adresse e-mail :")||"";
+  if(!saisi.trim()) return;
+  $("#gate-err").innerHTML=`<div class="notice">Envoi en cours…</div>`;
+  try{
+    const j=await appelOubli({action:"demande",identifiant:saisi});
+    $("#gate-err").innerHTML=`<div class="notice">${esc(j.message)}</div>`;
+  }catch(err){ $("#gate-err").innerHTML=`<div class="notice err">${esc(err.message)}</div>`; }
+});
+
+// Le lien reçu par e-mail arrive sous la forme `…/satisfaction_anset#recuperation=<jeton>`.
+// On bascule sur l'écran de choix AVANT toute tentative de session : la personne n'est
+// pas connectée, et c'est justement pour cela qu'elle est là.
+function jetonRecuperation(){
+  const h=location.hash||"";
+  const m=h.match(/[#&]recuperation=([^&]+)/);
+  return m?decodeURIComponent(m[1]):null;
+}
+function ecranRecuperation(){
+  $("#gate").style.display="flex"; $("#app").style.display="none";
+  document.querySelector("#gate .box").hidden=true;
+  $("#gate-nouveau").hidden=false;
+  $("#rec-mdp").focus();
+}
+$("#rec-btn").addEventListener("click", async ()=>{
+  const a=$("#rec-mdp").value, b=$("#rec-mdp2").value;
+  const err=m=>{ $("#rec-err").innerHTML=`<div class="notice err">${esc(m)}</div>`; };
+  $("#rec-err").innerHTML="";
+  if(a.length<8) return err("Le mot de passe doit faire au moins 8 caractères.");
+  if(a!==b) return err("Les deux saisies ne correspondent pas.");
+  try{
+    const j=await appelOubli({action:"changer",jeton:jetonRecuperation(),motdepasse:a});
+    // Le jeton est consommé : on le retire de l'URL pour qu'un rafraîchissement ne
+    // rejoue pas un lien devenu invalide, ce qui afficherait une erreur trompeuse.
+    history.replaceState(null,"",location.pathname+location.search);
+    $("#gate-nouveau").hidden=true;
+    const boite=document.querySelector("#gate .box"); boite.hidden=false;
+    if(j.email) $("#gate-email").value=j.email;
+    $("#gate-err").innerHTML=`<div class="notice">${esc(j.message)}</div>`;
+    $("#gate-pass").focus();
+  }catch(e){ err(e.message); }
+});
+$("#rec-mdp2").addEventListener("keydown",e=>{ if(e.key==="Enter")$("#rec-btn").click(); });
 $("#logout").addEventListener("click", async ()=>{ await sb.auth.signOut(); setAuth(false); });
 $("#themeBtn").addEventListener("click",()=>{ const r=document.documentElement;
   const cur=r.getAttribute("data-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");

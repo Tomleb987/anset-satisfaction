@@ -15,3 +15,9 @@ verify_jwt = true
 # Gestion des comptes → réservée au super admin (contrôle dans la fonction).
 [functions.admin-utilisateurs]
 verify_jwt = true
+
+# Mot de passe oublié → public par nécessité : qui a perdu son mot de passe ne peut
+# pas s'authentifier pour demander à le changer. Le durcissement est dans la
+# fonction (réponse neutre, jeton haché à usage unique, débit limité par compte).
+[functions.mot-de-passe-oublie]
+verify_jwt = false
