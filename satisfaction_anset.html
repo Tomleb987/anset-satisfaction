@@ -1562,7 +1562,15 @@ function renderUtilisateurs(rows){
     +`<th>État</th><th>Créé le</th><th></th></tr></thead><tbody>`+
     rows.map(u=>{
       const moi=u.user_id===monUserId;
-      const opts=Object.keys(ROLE_LABELS).map(r=>`<option value="${r}" ${r===u.role?"selected":""}>${ROLE_LABELS[r]}</option>`).join("");
+      // Un rôle absent de ROLE_LABELS ne doit JAMAIS laisser le menu retomber sur sa
+      // première option : celle-ci est « Super administrateur », et un menu sans
+      // sélection se lit comme une affirmation — c'est ce qui a fait croire, le
+      // 30/07/2026, que 24 conseillers étaient devenus super admins (page en cache
+      // dont la liste de rôles ignorait encore `conseiller`). On rend donc le rôle
+      // réel toujours présent et sélectionné, quitte à le signaler comme inconnu.
+      const connu=Object.prototype.hasOwnProperty.call(ROLE_LABELS,u.role);
+      const opts=(connu?"":`<option value="${esc(u.role)}" selected>${esc(u.role)} — rôle inconnu</option>`)
+        +Object.keys(ROLE_LABELS).map(r=>`<option value="${r}" ${r===u.role?"selected":""}>${ROLE_LABELS[r]}</option>`).join("");
       // Sur sa propre ligne : aucune action. Se rétrograder ou se désactiver
       // soi-même est le scénario classique de perte d'accès.
       const actions=moi?`<span class="sub">vous</span>`:

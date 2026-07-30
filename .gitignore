@@ -10,3 +10,11 @@ supabase/.temp/
 
 # Données clients (RGPD) — NE JAMAIS committer les exports .xlsx
 *.xlsx
+
+# Captures d'écran de diagnostic : elles montrent presque toujours des données
+# nominatives (liste des comptes, coordonnées de leads). Les visuels de marque, eux,
+# sont suivis explicitement et ne correspondent pas à ces motifs.
+Capture d*.png
+Capture d*.jpg
+Screenshot*.png
+screenshot*.png
