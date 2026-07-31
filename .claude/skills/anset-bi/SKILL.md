@@ -60,8 +60,13 @@ Toutes en `security_invoker = on` → soumises à la RLS `authenticated` (voir s
   (`satisfaction_anset.html`), source unique au même titre que `CIBLE_NPS`. `MIN_FIABLE` reste
   comme alias de `VOL.conclure`. Voir « Performance ≠ fiabilité » ci-dessous : le score reste
   toujours affiché, jamais masqué — une réponse fait basculer un NPS de −100 à +100.
-- `v_satisfaction_reseau` part de l'**union** réponses ∪ envois : une campagne diffusée sans
-  réponse doit apparaître (taux 0 %), sinon elle est absente jusqu'au sélecteur de campagne.
+- `v_satisfaction_reseau` **et** `v_satisfaction_conseiller` partent de l'**union** réponses ∪
+  envois : une campagne diffusée sans réponse doit apparaître (taux 0 %), sinon elle est absente
+  jusqu'au sélecteur de campagne ; et un conseiller invité dont personne n'a répondu doit
+  apparaître à 0 réponse avec ses invitations, au lieu d'être absent du classement (migration
+  `20260731090000`). Ne pas repasser ces vues en `from reponses ... left join envois` : c'est le
+  silence qu'on cherche à voir. Un envoi jamais parti (`statut_envoi <> 'envoye'`) ne crée en
+  revanche aucune ligne — sans retour attendu, il n'y a rien à lire.
 - **Taux de consentement** = `100*consentements/reponses`.
 - **Satisfaction globale en %** = `(csat_global − 1) / 4 × 100` (helper `csatPct`) : 1/5 → 0 %,
   5/5 → 100 %. Surtout **pas** `moyenne/5*100`, qui plancherait à 20 %. Le statut et la couleur
