@@ -665,6 +665,25 @@ function fiabilite(nNps,taux){
  *  ordonnerait du bruit, et le premier du classement pourrait tenir à une note. */
 const classable=nNps=>(nNps||0)>=VOL.conclure;
 
+/** Ce qu'une campagne peut rendre à un périmètre, au taux de participation observé sur
+ *  le réseau à cette même campagne. Répond à la question que « Non classé » laissait
+ *  ouverte : ce périmètre PEUT-IL être classé ? Un conseiller à 120 invitations et
+ *  1,5 % de participation n'atteindra jamais 10 notes, et lui écrire « obtenez
+ *  davantage de réponses » est alors une consigne creuse — le levier est le volume
+ *  d'invitations, décidé à l'import, pas son comportement.
+ *
+ *  Deux nombres, parce que ce sont deux populations (cf. migration 20260729190000) :
+ *  les réponses attendues, et les NOTES attendues — un tiers des répondants déclare
+ *  n'avoir eu aucun contact récent et ne se voit poser aucune question. Comparer des
+ *  réponses attendues au seuil de 10 NOTES surestimerait ce qui va revenir. */
+function attendu(envoyes, c=camp){
+  const r=rowFor(c), t=r.taux_reponse;
+  if(!envoyes || t==null) return null;
+  const rep=envoyes*t/100;
+  const part=(r.reponses||0)?(r.nps_rep||0)/r.reponses:null;
+  return { rep, notes: part==null?null:rep*part, taux:t };
+}
+
 /** Un écart entre deux campagnes n'est interprétable que si les DEUX portent assez de
  *  matière. Une campagne ouverte depuis un mois comparée à une campagne ouverte depuis
  *  la veille ne mesure pas une évolution de la satisfaction, mais l'écoulement du
@@ -930,7 +949,11 @@ async function chargerDonnees(){
   ]);
   D.reseau=reseau; D.zones=zones; D.agences=agences; D.conseillers=conseillers; D.taux=taux;
   D.verbatims=verbatims; D.rs=rs; D.sinistres=sinistres;
-  D.tauxKey={}; taux.forEach(t=>D.tauxKey[t.campagne+"|"+t.agence]=t.taux_reponse);
+  // `v_taux_reponse` est la seule source d'invitations par agence : la vue agence
+  // s'agrège sur l'agence DÉCLARÉE par le client et n'a donc pas d'`envoyes`.
+  D.tauxKey={}; D.envKey={};
+  taux.forEach(t=>{ D.tauxKey[t.campagne+"|"+t.agence]=t.taux_reponse;
+                    D.envKey[t.campagne+"|"+t.agence]=t.envoyes; });
   D.campagnes=[...new Set(reseau.map(r=>r.campagne).filter(Boolean))].sort();
   const has=D.campagnes.length>0;
   $("#sat-body").style.display=has?"block":"none"; $("#sat-empty").style.display=has?"none":"block";
@@ -1132,23 +1155,23 @@ function renderBD(){
   // tiers des réponses n'en contient aucune. C'est lui qui décide du marqueur
   // « échantillon faible », sans quoi une agence à 12 réponses dont 7 notées
   // affichait un NPS de +85,7 sans le moindre avertissement.
-  const norm2=x=>({name:x.name,sub:x.sub,n:x.n,nNps:x.nNps,score:x.score,csat:x.csat,csatSin:x.csatSin,nSin:x.nSin,delai:x.delai,taux:x.taux});
+  const norm2=x=>({name:x.name,sub:x.sub,n:x.n,nNps:x.nNps,score:x.score,csat:x.csat,csatSin:x.csatSin,nSin:x.nSin,delai:x.delai,taux:x.taux,env:x.env});
   if(granLevel==="global"){ hdr="Réseau"; sub="Vue d'ensemble du réseau";
-    rows=[norm2({name:"Réseau ANSET",n:r.reponses,nNps:r.nps_rep,score:r.score_nps,csat:r.csat_global,csatSin:s.csat_sinistre,nSin:s.reponses,delai:s.delai_reel,taux:r.taux_reponse})]; }
+    rows=[norm2({name:"Réseau ANSET",n:r.reponses,nNps:r.nps_rep,score:r.score_nps,csat:r.csat_global,csatSin:s.csat_sinistre,nSin:s.reponses,delai:s.delai_reel,taux:r.taux_reponse,env:r.envoyes})]; }
   else if(granLevel==="zone"){ hdr="Zone"; const z=D.zones.filter(x=>x.campagne===camp&&x.zone); sub=`${z.length} zone(s)`;
-    rows=z.map(x=>norm2({name:x.zone,n:x.reponses,nNps:x.nps_rep,score:x.score_nps,csat:x.csat_global,csatSin:x.csat_sinistre,nSin:x.n_sinistre,delai:x.delai_reel,taux:x.taux_reponse})); }
+    rows=z.map(x=>norm2({name:x.zone,n:x.reponses,nNps:x.nps_rep,score:x.score_nps,csat:x.csat_global,csatSin:x.csat_sinistre,nSin:x.n_sinistre,delai:x.delai_reel,taux:x.taux_reponse,env:x.envoyes})); }
   else if(granLevel==="agence"){ hdr="Agence"; const a=D.agences.filter(x=>x.campagne===camp); sub=`${a.length} agence(s)`;
     // `score_nps` est l'alias aligné sur les autres vues ; `nps_score` reste lu en
     // repli si la migration d'alignement n'est pas encore appliquée. Idem `nps_rep`,
     // ajouté à la vue agence par 20260729190000 : à défaut on le recompose depuis
     // les trois segments, qui totalisent exactement les réponses notées.
-    rows=a.map(x=>norm2({name:x.agence,n:x.reponses,nNps:x.nps_rep??((x.promoteurs||0)+(x.passifs||0)+(x.detracteurs||0)),score:x.score_nps??x.nps_score,csat:x.csat_global,csatSin:x.csat_sinistre,nSin:x.n_sinistre,delai:x.delai_reel,taux:D.tauxKey[camp+"|"+x.agence]})); }
+    rows=a.map(x=>norm2({name:x.agence,n:x.reponses,nNps:x.nps_rep??((x.promoteurs||0)+(x.passifs||0)+(x.detracteurs||0)),score:x.score_nps??x.nps_score,csat:x.csat_global,csatSin:x.csat_sinistre,nSin:x.n_sinistre,delai:x.delai_reel,taux:D.tauxKey[camp+"|"+x.agence],env:D.envKey[camp+"|"+x.agence]})); }
   else { hdr="Conseiller"; const c=D.conseillers.filter(x=>x.campagne===camp); sub=`${c.length} conseiller(s)`;
     // Pas d'agence en sous-titre : `conseillers.agence` est déduite de l'import et
     // ne vaut que pour la première ligne rencontrée, alors qu'un conseiller peut
     // travailler pour plusieurs agences (ou pour l'équipe Commerciaux). L'afficher
     // laissait croire à un rattachement fiable.
-    rows=c.map(x=>norm2({name:x.conseiller_nom||x.conseiller_id,n:x.reponses,nNps:x.nps_rep,score:x.score_nps,csat:x.csat_global,csatSin:x.csat_sinistre,nSin:x.n_sinistre,delai:x.delai_reel,taux:x.taux_reponse})); }
+    rows=c.map(x=>norm2({name:x.conseiller_nom||x.conseiller_id,n:x.reponses,nNps:x.nps_rep,score:x.score_nps,csat:x.csat_global,csatSin:x.csat_sinistre,nSin:x.n_sinistre,delai:x.delai_reel,taux:x.taux_reponse,env:x.envoyes})); }
   // TRI EN DEUX BLOCS. Les périmètres non classables ne sont pas mêlés au classement :
   // les ordonner par score ferait apparaître une agence à +100 sur une note au-dessus
   // d'une agence à +40 sur soixante. Ils passent après, triés par volume décroissant —
@@ -1166,6 +1189,7 @@ function renderBD(){
   // c'est voulu, un pourcentage doit comparer la même population.
   const head=`<thead><tr><th>${hdr}</th>`
     + `<th data-tip="Nombre de questionnaires reçus. Un client déclarant n'avoir eu aucun contact récent n'est interrogé sur rien : sa réponse compte ici, mais pas dans les notes NPS.">Réponses</th>`
+    + `<th data-tip="Ce que la campagne peut rendre à ce périmètre : invitations envoyées × taux de participation du réseau (${fmt(r.taux_reponse,1)} % sur ${esc(camp)}).<br>Sert à lire un « Non classé » : si l'attendu est déjà sous les ${VOL.conclure} notes, le volume ne suffira pas, quoi que fasse le périmètre — le levier est alors le nombre d'invitations.">Attendu</th>`
     + `<th data-tip="Réponses contenant une note NPS. C'est le dénominateur du score, et le nombre qui décide si le périmètre est classable (${VOL.conclure} minimum).">Notes NPS</th>`
     + `<th data-tip="Score NPS = % promoteurs − % détracteurs, calculé sur les seules réponses NOTÉES. Affiché en entier ; valeur exacte dans l'infobulle du score.">Score NPS</th>`
     + `<th data-tip="Ce que vaut la mesure, indépendamment du score : moins de ${VOL.conclure} notes → insuffisante ; moins de ${VOL.tendance} → à confirmer ; au-delà, la participation prend le relais.">Fiabilité</th>`
@@ -1184,8 +1208,27 @@ function renderBD(){
     // mais il est neutralisé visuellement et explicitement dit non classé : c'est la
     // couleur verte sur « +100 pour une note » qui trompe, pas le chiffre lui-même.
     const col=ok?scoreColor(x.score):cssv("--muted");
+    // Attendu : un ORDRE DE GRANDEUR, jamais une promesse. D'où le « ≈ » et l'entier —
+    // « 2,4 réponses attendues » afficherait une précision que le calcul n'a pas, et
+    // ferait discuter la décimale au lieu du volume d'invitations.
+    const att=attendu(x.env);
+    // « Plafond » = même l'attendu reste sous le seuil : le périmètre ne peut pas être
+    // classé sur cette campagne. C'est l'information que « Non classé » seul cachait.
+    // Réservé aux périmètres PAS ENCORE classés : l'attendu est calculé au taux du
+    // réseau, et un périmètre qui le dépasse a déjà démenti la prévision — annoncer un
+    // plafond à qui affiche 12 notes serait une contradiction dans la même ligne.
+    const plafond=!ok && att && att.notes!=null && att.notes<VOL.conclure;
     return `<tr><td>${nm}</td>
       <td class="num">${x.n??0}</td>
+      <td class="num" style="color:${plafond?cssv("--warn"):"var(--muted)"}"${att?` data-tip="${(x.env||0).toLocaleString("fr-FR")} invitation${(x.env||0)>1?"s":""} × ${fmt(att.taux,1)} % de participation ≈ <b>${Math.round(att.rep)} réponse${Math.round(att.rep)>1?"s":""}</b>`
+        + (att.notes!=null?`, dont ≈ <b>${Math.round(att.notes)} note${Math.round(att.notes)>1?"s":""} NPS</b> (un tiers des répondants n'est interrogé sur rien).`:".")
+        + (plafond?`<br>Sous les ${VOL.conclure} notes requises : <b>ce périmètre ne peut pas être classé sur cette campagne</b>, quel que soit le retour. Le levier est le nombre d'invitations.`:"")+`"`
+        : ` data-tip="Invitations inconnues pour ce périmètre : attendu non calculable."`}>`
+      // Les NOTES attendues sont rappelées en second : c'est à elles que se compare le
+      // seuil, et sans ce rappel « ≈ 7 attendu » se lisait comme 7 notes — la confusion
+      // réponses/notes que la colonne « Notes NPS » existe précisément pour dissiper.
+      + (att?`≈ ${Math.round(att.rep)}`+(att.notes!=null?` <span class="agc">· ${Math.round(att.notes)} note${Math.round(att.notes)>1?"s":""}</span>`:""):"—")
+      + `</td>
       <td class="num"${nn===0?` style="color:var(--muted)"`:""}>${nn||"—"}</td>
       <td><span class="cchip" style="background:color-mix(in srgb,${col} 16%,transparent);color:${col}"
         data-tip="${x.score==null?"Aucune note NPS : score non calculable."
@@ -1193,12 +1236,12 @@ function renderBD(){
           +(ok?"":` Moins de ${VOL.conclure} notes : périmètre non classé.`)}"
         >${x.score==null?"—":(x.score>0?"+":"")+Math.round(x.score)}</span></td>
       <td><span class="cchip" style="background:color-mix(in srgb,${fc} 16%,transparent);color:${fc}"
-        data-tip="${esc(fia.pourquoi)}">${ok||!nn?esc(fia.lbl):"Non classé"}</span></td>
+        data-tip="${esc(fia.pourquoi)}${plafond?` — et l'attendu de la campagne (≈ ${Math.round(att.notes)} note${Math.round(att.notes)>1?"s":""}) reste sous les ${VOL.conclure} requises : le seuil est hors d'atteinte ici.`:""}">${ok||!nn?esc(fia.lbl):"Non classé"}</span></td>
       <td class="num" style="color:${classable(x.n)?csatColor(x.csat):cssv("--muted")}"${x.csat!=null&&!classable(x.n)?` data-tip="Sur ${x.n??0} réponse(s) : la note est affichée, mais moins de ${VOL.conclure} réponses ne permettent pas de la comparer aux autres périmètres."`:""}>${fmt(x.csat,1)}</td>
       <td class="num" style="color:${classable(x.nSin)?csatColor(x.csatSin):cssv("--muted")}"${x.csatSin!=null?` data-tip="Sur ${x.nSin??0} réponse(s) de clients indemnisés.${classable(x.nSin)?"":` Moins de ${VOL.conclure} : note provisoire.`}"`:""}>${fmt(x.csatSin,1)}</td>
       <td class="num" style="color:${delaiColor(x.delai)}">${x.delai==null?"—":Math.round(x.delai)+" j"}</td>
       <td class="num" style="color:${tauxColor(x.taux)}">${x.taux==null?"—":Math.round(x.taux)+" %"}</td></tr>`;
-  }).join("") : `<tr><td colspan="9" class="empty">Aucune réponse reçue pour cette campagne : rien à comparer.</td></tr>`;
+  }).join("") : `<tr><td colspan="10" class="empty">Aucune réponse reçue pour cette campagne : rien à comparer.</td></tr>`;
   $("#bd").innerHTML=head+"<tbody>"+body+"</tbody>";
   // Dire combien de lignes sont réellement classées : sans ce compte, un tableau
   // presque entièrement « non classé » se lit comme un classement complet.
@@ -1401,10 +1444,17 @@ function renderMoi(){
     + (nRep>0 && nRep<VOL.conclure && sr!=null
         ? ` <span class="ctx">Comparaison indicative — ${nRep} note${nRep>1?"s":""} de votre côté contre ${res.nps_rep||0} pour le réseau.</span>` : "")
     // Message d'orientation, pas de reproche : ce qui manque est une donnée, et
-    // l'obtenir ne dépend qu'en partie du conseiller.
+    // l'obtenir ne dépend qu'en partie du conseiller. L'attendu de la campagne le dit
+    // franchement — quand le seuil est hors d'atteinte, « obtenez davantage de
+    // réponses » serait une consigne creuse adressée à qui n'a pas la main dessus.
     + (nRep>0 && nRep<VOL.conclure
-        ? `<br><b style="color:var(--warn)">Résultat provisoire.</b> Votre priorité est d'obtenir davantage de réponses`
-          + ` afin de stabiliser votre résultat : avec ${nRep} note${nRep>1?"s":""}, chaque nouvelle réponse peut fortement déplacer le score.` : "")
+        ? `<br><b style="color:var(--warn)">Résultat provisoire.</b> Avec ${nRep} note${nRep>1?"s":""},`
+          + ` chaque nouvelle réponse peut fortement déplacer le score.`
+          + (()=>{ const a=attendu(r.envoyes, mCamp); if(!a||a.notes==null) return "";
+              const an=Math.round(a.notes);
+              return a.notes<VOL.conclure
+                ? ` <span class="ctx">Sur les ${(r.envoyes||0).toLocaleString("fr-FR")} client${(r.envoyes||0)>1?"s":""} invité${(r.envoyes||0)>1?"s":""} pour vous, la participation observée (${fmt(a.taux,1)} %) laisse attendre environ ${an} note${an>1?"s":""} : le seuil de ${VOL.conclure} ne sera pas atteint sur cette campagne, et cela ne dépend pas de vous.</span>`
+                : ` <span class="ctx">La campagne peut encore rendre environ ${an} notes sur vos ${(r.envoyes||0).toLocaleString("fr-FR")} clients invités : le seuil de ${VOL.conclure} reste atteignable.</span>`; })() : "")
     + (nRep===0 ? `<br><b style="color:var(--muted)">Aucune note NPS pour l'instant.</b> `
         + (tot?`Vos ${tot} réponse${tot>1?"s":""} ne contiennent pas de note : les clients ayant déclaré n'avoir eu aucun contact récent ne se voient pas poser la question.`
              :`Dès qu'un client répondra, votre score apparaîtra ici.`) : "");

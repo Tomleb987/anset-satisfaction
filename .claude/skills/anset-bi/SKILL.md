@@ -86,6 +86,15 @@ ne porte pas. Deux dimensions, donc, jamais une seule — helpers de l'app :
   et barres) au lieu d'en occuper la tête, et n'est pas trié par score mais par volume.
 - `stVol(st, pill, nBase)` : même règle pour une note /5 ou un taux — sous le seuil, pastille
   « Provisoire » et couleur retirée. À utiliser pour **toute** nouvelle tuile de verdict.
+- `attendu(envoyes, campagne)` → `{rep, notes, taux}` : ce que la campagne peut rendre, au taux de
+  participation du **réseau** sur cette même campagne (comparaison à durée écoulée égale). Répond
+  à la question que « Non classé » laisse ouverte — le périmètre peut-il l'être ? Deux nombres car
+  deux populations : les réponses, et les **notes** (× `nps_rep/reponses` du réseau). Le seuil se
+  compare aux notes, jamais aux réponses. Le drapeau « plafond » (seuil hors d'atteinte) ne
+  s'affiche que sur un périmètre **pas encore classé** : l'attendu est une prévision au taux du
+  réseau, et un périmètre qui la dépasse l'a déjà démentie. Invitations par périmètre : `envoyes`
+  dans `v_satisfaction_reseau` / `_zone` / `_conseiller`, et via `v_taux_reponse` pour l'agence
+  (la vue agence s'agrège sur l'agence **déclarée** et n'en a pas).
 - `ecartSur(nA, nB)` → `deltaTag(..., {fiable})` : un écart n'est un jugement que si les **deux**
   campagnes concluent, sinon il mesure l'écoulement du temps. `{entier:true}` sur les grandeurs
   affichées arrondies (NPS) : l'écart doit être celui des chiffres lus à l'écran.
