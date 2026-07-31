@@ -5,8 +5,9 @@ package-lock.json
 # Réglages locaux de l'agent (permissions machine) — pas de partage
 .claude/settings.local.json
 
-# État local CLI Supabase
+# État local CLI Supabase (dont la pile locale de validation des migrations)
 supabase/.temp/
+supabase/.branches/
 
 # Données clients (RGPD) — NE JAMAIS committer les exports .xlsx
 *.xlsx

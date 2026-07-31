@@ -86,3 +86,4 @@ comment on view public.v_satisfaction_conseiller is
   'Indicateurs par conseiller et par campagne, sur l''UNION envois ∪ réponses : un conseiller invité dont personne n''a répondu apparaît avec reponses = 0 et son nombre d''invitations, au lieu d''être absent. security_invoker = on : la RLS de l''appelant s''applique (un conseiller ne voit que sa ligne).';
 
 grant select on public.v_satisfaction_conseiller to authenticated;
+
