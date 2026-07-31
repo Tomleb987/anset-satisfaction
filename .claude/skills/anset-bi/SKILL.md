@@ -56,9 +56,10 @@ Toutes en `security_invoker = on` → soumises à la RLS `authenticated` (voir s
   envoi réellement parti le plus récent). Un même `req` peut exister dans plusieurs campagnes ;
   sans ce tri, les réponses se classaient dans une campagne qui n'avait rien envoyé. Même règle
   dans `submit-sondage` — les deux doivent rester alignées.
-- **Échantillon minimal** : `MIN_FIABLE = 10` notes NPS. En dessous, le score reste affiché mais
-  accompagné d'un avertissement (hero) et d'un « * » (tableau) — une réponse fait basculer un NPS
-  de −100 à +100.
+- **Seuils de volume** : constante **`VOL = {conclure:10, tendance:30, significatif:100}`**
+  (`satisfaction_anset.html`), source unique au même titre que `CIBLE_NPS`. `MIN_FIABLE` reste
+  comme alias de `VOL.conclure`. Voir « Performance ≠ fiabilité » ci-dessous : le score reste
+  toujours affiché, jamais masqué — une réponse fait basculer un NPS de −100 à +100.
 - `v_satisfaction_reseau` part de l'**union** réponses ∪ envois : une campagne diffusée sans
   réponse doit apparaître (taux 0 %), sinon elle est absente jusqu'au sélecteur de campagne.
 - **Taux de consentement** = `100*consentements/reponses`.
@@ -69,6 +70,32 @@ Toutes en `security_invoker = on` → soumises à la RLS `authenticated` (voir s
   source unique dont dépendent le repère de la jauge, les libellés, la ligne pointillée du graphe
   de tendance, `scoreColor` et `stScore`. Changer la cible = changer cette seule ligne.
   Ne pas confondre avec l'objectif de **délai d'indemnisation**, qui vaut 30 **jours** (`stDelai`).
+
+## Performance ≠ fiabilité (règle transverse, à respecter pour tout nouvel indicateur)
+
+Un badge unique répond à « comment est le score ? » en laissant croire qu'il répond à « que vaut
+ce score ? ». Sur 3 notes, « À redresser » énonce sur un conseiller une conclusion que la donnée
+ne porte pas. Deux dimensions, donc, jamais une seule — helpers de l'app :
+
+- `performance(score, nNps)` : le verdict `stScore` **au-dessus** de `VOL.conclure` ; en dessous,
+  « Tendance favorable / neutre / défavorable » en neutre.
+- `fiabilite(nNps, taux)` : « Non mesurable / Insuffisante / À confirmer / Limitée / Correcte /
+  Bonne », avec un `pourquoi` chiffré pour l'infobulle. Le volume de notes commande d'abord, la
+  participation seulement ensuite (sous 10 notes, parler de représentativité est prématuré).
+- `classable(nNps)` : autorise un **rang**. Un périmètre non classable sort du classement (tableau
+  et barres) au lieu d'en occuper la tête, et n'est pas trié par score mais par volume.
+- `stVol(st, pill, nBase)` : même règle pour une note /5 ou un taux — sous le seuil, pastille
+  « Provisoire » et couleur retirée. À utiliser pour **toute** nouvelle tuile de verdict.
+- `ecartSur(nA, nB)` → `deltaTag(..., {fiable})` : un écart n'est un jugement que si les **deux**
+  campagnes concluent, sinon il mesure l'écoulement du temps. `{entier:true}` sur les grandeurs
+  affichées arrondies (NPS) : l'écart doit être celui des chiffres lus à l'écran.
+
+Ce que la règle interdit en pratique : colorer un score de 72 px sur 1 note, afficher « 100 % de
+détracteurs » là où « 1 détracteur sur 1 note » est fidèle (barre **et** légende passent au
+nombre), classer une agence à +100 sur une note au-dessus d'une agence à +40 sur soixante, relier
+d'un trait plein une campagne pleine à une campagne d'un jour (trait pointillé, point creux,
+mention sous le graphe). **Exception assumée** : le taux de réponse garde son verdict à faible
+volume — son dénominateur est le nombre d'invitations, `0,2 %` sur 1 240 envois est une mesure.
 
 ## Seuils de couleur (helpers JS de l'app)
 
@@ -94,6 +121,7 @@ graphique, réutiliser ces primitives et la palette ; charger le skill global
   chronologiquement. Les libellés d'axe tronquent l'année (`slice(2)`).
 - Formatage : `fmt(v,d)` (décimales, `—` si null), `pct(v)` (entier + %),
   `.num` pour l'alignement tabulaire.
-- **Delta** = campagne courante vs précédente ; flèche colorée up/down/flat.
+- **Delta** = campagne courante vs précédente ; flèche colorée up/down/flat, neutralisée par
+  `{fiable:false}` quand le volume ne permet pas de conclure (cf. « Performance ≠ fiabilité »).
 - Ne jamais exposer de PII dans un agrégat destiné à une vue « réseau » — les verbatims
   et données nominatives restent derrière login (RLS).

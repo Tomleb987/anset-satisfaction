@@ -105,6 +105,16 @@
   .big{font-size:72px; font-weight:800; line-height:.9; letter-spacing:-2px;}
   .verdict{display:inline-flex; align-items:center; gap:7px; padding:5px 11px; border-radius:999px; font-size:13px; font-weight:700; margin-bottom:8px;}
   .verdict .ic{width:9px; height:9px; border-radius:50%;}
+  /* Intitulé de la dimension (« Performance », « Fiabilité ») : le badge doit dire
+     DE QUOI il parle, sinon deux pastilles côte à côte deviennent indéchiffrables. */
+  .verdict .vk{font-weight:500; opacity:.75;}
+  /* Empilées, jamais côte à côte : sur une ligne, la seconde pastille passait au-dessus
+     du score et le titre de la carte semblait porter deux sous-titres. */
+  .verdicts{display:flex; flex-direction:column; align-items:flex-start; gap:5px;}
+  .verdicts .verdict{margin-bottom:0;}
+  /* Jauge rendue secondaire quand le volume ne permet pas de conclure : la position
+     du curseur reste lisible, mais elle cesse d'attirer l'œil comme un résultat. */
+  .scale.provisoire{opacity:.45;}
   .trendtag{font-size:13px; font-weight:700; display:inline-flex; align-items:center; gap:5px;}
   .trendtag .vs{color:var(--muted); font-weight:500;}
   .up{color:var(--good);} .down{color:var(--bad);} .flat{color:var(--muted);}
@@ -271,6 +281,8 @@
     <div class="toolbar">
       <label class="fld">Campagne <select id="f-campagne"></select></label>
       <div class="sp"></div>
+      <!-- Horodatage de la dernière lecture réussie, et état de l'actualisation. -->
+      <div id="sat-maj" style="font-size:12px; text-align:right; max-width:340px"></div>
       <button class="ghost" id="sat-refresh">Actualiser</button>
     </div>
     <div id="sat-body">
@@ -278,7 +290,9 @@
         <div class="card pad hero-nps">
           <div class="eyebrow">Recommandation client · indice NPS</div>
           <div class="score"><div class="big num" id="h-score">—</div><div id="h-side"></div></div>
-          <div class="scale">
+          <!-- id explicite : les deux vues (manager et conseiller) ont une carte
+               `.hero-nps .scale`, un sélecteur de classe viserait toujours la première. -->
+          <div class="scale" id="h-scale">
             <!-- Repère et libellé d'objectif positionnés au boot depuis CIBLE_NPS. -->
             <div class="scaletrack"><div class="scaletarget" id="h-target"></div>
               <div class="scalemark" id="h-mark" style="left:50%"></div></div>
@@ -357,7 +371,7 @@
         <div class="card pad hero-nps">
           <div class="eyebrow">Mes clients me recommandent · indice NPS</div>
           <div class="score"><div class="big num" id="m-score">—</div><div id="m-side"></div></div>
-          <div class="scale">
+          <div class="scale" id="m-scale">
             <div class="scaletrack"><div class="scaletarget" id="m-target"></div>
               <div class="scalemark" id="m-reseau" style="left:50%; background:var(--ciel)" data-tip="Score du réseau, toutes agences confondues."></div>
               <div class="scalemark" id="m-mark" style="left:50%" data-tip="Mon score."></div></div>
@@ -570,10 +584,11 @@ const RE_EMAIL=/^[^@\s;,\/]+@[^@\s;,\/]+\.[a-z]{2,}$/i;
 // ligne pointillée du graphe, seuils de couleur et verdicts en dépendent tous.
 // (Ne pas confondre avec l'objectif de délai d'indemnisation, en JOURS : voir stDelai.)
 const CIBLE_NPS = 18;
-// Sous ce nombre de réponses NOTÉES, un score NPS n'a pas de sens statistique :
-// une seule réponse le fait basculer de −100 à +100. On affiche quand même la
-// valeur — la masquer serait pire — mais accompagnée d'un avertissement.
-const MIN_FIABLE = 10;
+// Les seuils de volume (dont l'ancien MIN_FIABLE) vivent plus bas, dans le bloc
+// « PERFORMANCE ≠ FIABILITÉ » : ils y sont indissociables des libellés qu'ils
+// commandent. Sous 10 réponses NOTÉES, un score NPS n'a pas de sens — une seule
+// réponse le fait basculer de −100 à +100 — mais on l'affiche quand même : le
+// masquer serait pire que l'accompagner d'un avertissement.
 
 // ---- utils ----
 const $=s=>document.querySelector(s);
@@ -604,6 +619,76 @@ function stScore(v){ return v==null?["flat","—"]: v>=CIBLE_NPS?["good","Bon"]:
 function stCsat(v){ return v==null?["flat","—"]: v>=4?["good","Bon"]: v>=3?["warn","Moyen"]:["bad","Faible"]; }
 function stTaux(v){ return v==null?["flat","—"]: v>=15?["good","Bon"]: v>=10?["warn","Moyen"]:["bad","Faible"]; }
 function stDelai(v){ return v==null?["flat","—"]: v<=30?["good","Dans l'objectif"]: v<=40?["warn","À surveiller"]:["bad","Trop long"]; }
+
+// ====================== PERFORMANCE ≠ FIABILITÉ ======================
+// Un badge unique « Bon / Correct / À redresser » répond à la question « comment
+// est le score ? » en laissant croire qu'il répond à « que vaut ce score ? ». Sur
+// 3 notes NPS, « À redresser » énonce une conclusion sur un conseiller que la
+// donnée ne permet pas : une seule réponse fait basculer un NPS de −100 à +100.
+// On affiche donc DEUX dimensions, jamais une seule.
+//
+// Seuils de volume : SOURCE UNIQUE, au même titre que CIBLE_NPS. En dépendent les
+// libellés de fiabilité, l'atténuation de la jauge et l'exclusion du classement —
+// trois endroits qui divergeraient si le nombre était recopié.
+const VOL={ conclure:10, tendance:30, significatif:100 };
+// Nom historique conservé : il est lu ailleurs dans le fichier et dans le skill BI.
+const MIN_FIABLE=VOL.conclure;
+
+/** Ce que MESURE le score. Sous le seuil, aucun verdict : une tendance à confirmer. */
+function performance(score,nNps){
+  if(score==null) return {st:"flat", lbl:"Non calculable"};
+  // Libellés courts : la carte pose les deux pastilles côte à côte, et « Fiabilité :
+  // Insuffisante » dit déjà qu'il reste à confirmer. Le répéter dans l'autre pastille
+  // la faisait passer à la ligne au-dessus du score.
+  if((nNps||0)<VOL.conclure){
+    return {st:"flat", lbl: score>=CIBLE_NPS?"Tendance favorable"
+                          : score>=0?"Tendance neutre"
+                          : "Tendance défavorable"};
+  }
+  const [st,lbl]=stScore(score); return {st,lbl};
+}
+
+/** Ce que VAUT la mesure : volume de notes d'abord, participation ensuite.
+ *  Le taux de réponse n'intervient qu'au-delà du volume : sous 10 notes, c'est le
+ *  volume qui commande, et parler de représentativité serait prématuré. */
+function fiabilite(nNps,taux){
+  const n=nNps||0;
+  if(!n)                   return {st:"flat", lbl:"Non mesurable", pourquoi:"aucune note NPS"};
+  if(n<VOL.conclure)       return {st:"bad",  lbl:"Insuffisante",  pourquoi:`${n} note${n>1?"s":""} — il en faut ${VOL.conclure} pour conclure`};
+  if(n<VOL.tendance)       return {st:"warn", lbl:"À confirmer",   pourquoi:`${n} notes — tendance à confirmer`};
+  if(taux!=null&&taux<10)  return {st:"warn", lbl:"Limitée",       pourquoi:`taux de réponse ${fmt(taux,1)} % — faible participation`};
+  if(n<VOL.significatif)   return {st:"good", lbl:"Correcte",      pourquoi:`${n} notes`};
+  return {st:"good", lbl:"Bonne", pourquoi:`${n} notes — volume significatif`};
+}
+
+/** Un périmètre est-il classable ? Sous le seuil, un rang n'a pas de sens : il
+ *  ordonnerait du bruit, et le premier du classement pourrait tenir à une note. */
+const classable=nNps=>(nNps||0)>=VOL.conclure;
+
+/** Un écart entre deux campagnes n'est interprétable que si les DEUX portent assez de
+ *  matière. Une campagne ouverte depuis un mois comparée à une campagne ouverte depuis
+ *  la veille ne mesure pas une évolution de la satisfaction, mais l'écoulement du
+ *  temps — et un « ▼ −51,3 pts » rouge sous une pastille « Provisoire » se contredit. */
+const ecartSur=(a,b)=>classable(a)&&classable(b);
+
+/** Verdict d'une note /5 ou d'un taux, SOUS CONDITION DE VOLUME. Le NPS n'a pas le
+ *  monopole du problème : « Satisfaction globale — Faible » sur deux réponses notées
+ *  est le même jugement prématuré, et il s'affiche en rouge sur cinq tuiles à la fois
+ *  au lendemain d'un envoi. Le chiffre reste, la pastille dit « Provisoire » et la
+ *  couleur s'efface. Rien à voir avec un taux de réponse, lui : son dénominateur est
+ *  le nombre d'invitations, et 0,2 % sur 1 240 envois est une mesure, pas du bruit. */
+function stVol(st,pill,nBase){
+  return (nBase||0)>=VOL.conclure ? [st,pill] : ["flat",(nBase||0)?"Provisoire":"—"];
+}
+
+/** Badge à deux lignes. Le texte porte l'information, la couleur ne fait que la
+ *  redoubler — un badge lu en noir et blanc doit rester compréhensible. */
+function badge(st,titre,valeur,detail){
+  const c=stCol(st);
+  return `<div class="verdict" style="background:color-mix(in srgb,${c} 16%,transparent);color:${c}"
+    ${detail?`data-tip="${esc(detail)}"`:""} title="${esc(titre+" : "+valeur+(detail?" — "+detail:""))}">
+    <span class="ic" style="background:${c}"></span><span class="vk">${titre}</span> ${esc(valeur)}</div>`;
+}
 // Le consentement au recontact a sa PROPRE échelle. Il était coloré par stTaux,
 // c'est-à-dire avec les seuils du taux de réponse (10 % / 15 %) : deux grandeurs
 // sans rapport — un client sur cinq qui accepte d'être rappelé n'est pas « bon »
@@ -617,16 +702,25 @@ const stCol=s=>({good:cssv("--good"),warn:cssv("--warn"),bad:cssv("--bad"),brand
 // `vs` : l'écran « Mes résultats » a son propre sélecteur de campagne, il ne peut
 // pas hériter du `prevCamp` du dashboard réseau — le libellé annoncerait une
 // comparaison avec un mois qui n'est pas celui du calcul.
+// `entier` : l'écart se calcule sur les valeurs AFFICHÉES. Le NPS s'affiche arrondi,
+//   et lire « −100 » puis « +34 » puis « −134,4 pts » donne l'impression qu'un des
+//   trois nombres est faux. La décimale perdue n'a aucune portée décisionnelle.
+// `fiable:false` : la variation reste écrite mais cesse d'être un jugement. Entre un
+//   mois à 32 notes et un mois à 1 note, « ▼ −134 pts » en rouge annonce un
+//   effondrement là où il n'y a qu'un changement de volume.
 function deltaTag(cur,prev,opt={}){
   if(cur==null||prev==null) return `<span class="trendtag flat">—</span>`;
+  if(opt.entier){ cur=Math.round(cur); prev=Math.round(prev); }
   const d=cur-prev, eps=opt.eps??0.05, unit=opt.unit||"";
   const ref=opt.vs!==undefined?opt.vs:prevCamp;
   const better = opt.invert? d<-eps : d>eps;
   const worse  = opt.invert? d>eps  : d<-eps;
-  const cls=better?"up":worse?"down":"flat";
+  const sur = opt.fiable!==false;
+  const cls = !sur?"flat" : better?"up":worse?"down":"flat";
   const arr=Math.abs(d)<=eps?"=":(d>0?"▲":"▼");
   const val=(d>0?"+":"")+ (Number.isInteger(d)?d:d.toFixed(1).replace(".",","));
-  return `<span class="trendtag ${cls}">${arr} ${val}${unit} <span class="vs">vs ${moisCourt(ref)}</span></span>`;
+  return `<span class="trendtag ${cls}"${sur?"":` data-tip="Écart calculé sur un volume trop faible pour conclure : il reflète surtout le nombre de réponses reçues, pas une évolution de la satisfaction."`}>`
+    + `${arr} ${val}${unit} <span class="vs">vs ${moisCourt(ref)}</span></span>`;
 }
 
 // ---- SVG : lissage + sparkline + infobulle ----
@@ -801,7 +895,30 @@ $("#tabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(
 
 // ============================ DASHBOARD ============================
 const D={}; let camp=null, prevCamp=null, granLevel="global";
+// Horodatage de la dernière lecture réussie. Sans lui, impossible de distinguer un
+// indicateur qui n'a pas bougé d'un écran resté ouvert depuis la veille — et c'est
+// justement l'écran qu'on laisse ouvert qu'on croit à jour.
+function majHorodatage(etat,detail){
+  const el=$("#sat-maj"); if(!el) return;
+  if(etat==="charge"){ el.innerHTML=`<span class="sub">Actualisation en cours…</span>`; return; }
+  if(etat==="erreur"){ el.innerHTML=`<span style="color:var(--bad)">Actualisation impossible : ${esc(detail||"erreur réseau")}. Les chiffres affichés sont ceux du dernier chargement réussi.</span>`; return; }
+  el.innerHTML=`<span class="sub">Données actualisées le <b>${detail}</b></span>`;
+}
+
+let chargementEnCours=false;
 async function loadDashboard(){
+  // Anti double-clic : deux chargements simultanés se terminent dans un ordre
+  // imprévisible et le second peut écraser le premier avec des données plus vieilles.
+  if(chargementEnCours) return;
+  chargementEnCours=true;
+  const btn=$("#sat-refresh"); if(btn){ btn.disabled=true; btn.textContent="Actualisation…"; }
+  majHorodatage("charge");
+  try{ await chargerDonnees(); }
+  catch(e){ majHorodatage("erreur", e&&e.message); }
+  finally{ chargementEnCours=false; if(btn){ btn.disabled=false; btn.textContent="Actualiser"; } }
+}
+
+async function chargerDonnees(){
   const q=(t,order)=>{ let r=sb.from(t).select("*"); if(order) r=r.order(order.col,{ascending:order.asc}); return r.then(x=>x.data||[]); };
   // `v_sinistres_reseau` porte désormais TOUT le volet sinistre (volume, délai réel,
   // NPS et notes des seuls clients indemnisés). `v_satisfaction_motif` n'est plus lue :
@@ -818,9 +935,14 @@ async function loadDashboard(){
   const has=D.campagnes.length>0;
   $("#sat-body").style.display=has?"block":"none"; $("#sat-empty").style.display=has?"none":"block";
   majMoi();                       // écran conseiller (no-op pour les autres rôles)
+  majHorodatage("ok", new Date().toLocaleString("fr-FR",{dateStyle:"long",timeStyle:"short"}));
   if(!has) return;
-  const fc=$("#f-campagne"); fc.innerHTML=D.campagnes.map(c=>`<option value="${c}">${c}</option>`).join("");
-  fc.value=D.campagnes[D.campagnes.length-1];
+  const fc=$("#f-campagne"); const choisie=fc.value;
+  fc.innerHTML=D.campagnes.map(c=>`<option value="${c}">${c}</option>`).join("");
+  // La campagne sélectionnée SURVIT à une actualisation : la réinitialiser au dernier
+  // mois renvoyait l'utilisateur ailleurs que là où il regardait, et lui faisait
+  // croire que les chiffres avaient changé.
+  fc.value=D.campagnes.includes(choisie)?choisie:D.campagnes[D.campagnes.length-1];
   // Le dashboard réseau n'existe pas pour un conseiller (onglet retiré) : le
   // peindre sur ses seules lignes serait du travail perdu sur un écran faux.
   if(monRole!=="conseiller") renderAll();
@@ -845,42 +967,83 @@ function renderAll(){
 
 function renderHero(){
   const r=rowFor(camp); const s=r.score_nps;
-  $("#h-score").textContent=(s==null?"—":(s>0?"+":"")+s); $("#h-score").style.color=scoreColor(s);
-  const [st,verd]=stScore(s), c=stCol(st);
+  const nRep=r.nps_rep||0, taux=r.taux_reponse;
+  // Score affiché en ENTIER : deux décimales de NPS n'ont aucun sens décisionnel et
+  // suggèrent une précision que 46 notes ne portent pas. La valeur exacte reste dans
+  // l'infobulle et dans tous les calculs — l'arrondi n'a lieu qu'à l'affichage.
+  $("#h-score").textContent=(s==null?"—":(s>0?"+":"")+Math.round(s));
+  // Le score en 72 px est l'élément le plus fort de l'écran : sa COULEUR conclut avant
+  // que la moindre mention ne soit lue. Sous le seuil, elle est retirée — le chiffre
+  // reste, le jugement chromatique non.
+  $("#h-score").style.color=classable(nRep)?scoreColor(s):cssv("--muted");
+  $("#h-score").setAttribute("data-tip", s==null
+    ? "Aucune note NPS sur cette campagne : le score n'est pas calculable."
+    : `Valeur exacte : ${(s>0?"+":"")}${fmt(s,1)}. Calculée sur ${nRep} note${nRep>1?"s":""} NPS.`);
+  const perf=performance(s,nRep), fia=fiabilite(nRep,taux);
   const rp=rowFor(prevCamp);
-  $("#h-side").innerHTML=`
-    <div class="verdict" style="background:color-mix(in srgb,${c} 16%,transparent);color:${c}">
-      <span class="ic" style="background:${c}"></span>${verd}</div>
-    <div>${deltaTag(s, prevCamp?rp.score_nps:null, {unit:" pts"})}</div>`;
+  $("#h-side").innerHTML=`<div class="verdicts">`
+    + badge(perf.st,"Performance",perf.lbl,
+        s==null?"":`Score ${(s>0?"+":"")}${fmt(s,1)} — objectif ${CIBLE_NPS}`)
+    + badge(fia.st,"Fiabilité",fia.lbl,fia.pourquoi)
+    + `</div><div>${deltaTag(s, prevCamp?rp.score_nps:null,
+        {unit:" pts", entier:true, fiable:ecartSur(nRep,rp.nps_rep)})}</div>`;
   const pos=s==null?50:Math.max(0,Math.min(100,(s+100)/2));
   $("#h-mark").style.left=pos+"%";
-  const nRep=r.nps_rep||0;
+  // Sous le seuil, la jauge passe au second plan : c'est le manque de réponses qui
+  // est l'information, pas la position du curseur.
+  $("#h-scale").classList.toggle("provisoire", nRep>0 && nRep<VOL.conclure);
   // « Sur N notes NPS », pas « sur N réponses » : les trois segments ci-dessous ne
   // totalisent que les répondants AYANT NOTÉ. Un tiers des réponses n'a aucune note
   // (clients ayant déclaré n'avoir eu aucun contact récent : le formulaire ne leur
   // pose alors aucune question), donc l'ancienne phrase annonçait 48 réponses pour
   // une décomposition qui en totalisait 32.
-  $("#h-foot").innerHTML=`Sur <b>${nRep} note${nRep>1?"s":""} NPS</b>`
-    + ((r.reponses||0)>nRep?` <span class="ctx">(${r.reponses} réponses au total, ${(r.reponses||0)-nRep} sans note)</span>`:"")
-    + ` : <b style="color:var(--good)">${r.promoteurs||0} promoteurs</b>, ${r.passifs||0} passifs, <b style="color:var(--bad)">${r.detracteurs||0} détracteurs</b>.`
-    + (nRep>0 && nRep<MIN_FIABLE ? ` <b style="color:var(--warn)">Échantillon faible (${nRep} note${nRep>1?"s":""} NPS)</b> : chaque réponse déplace fortement le score.` : "")
-    + (nRep===0 ? ` <b style="color:var(--muted)">Aucune note NPS pour l'instant.</b>` : "");
+  const nRepo=r.reponses||0, nEnv=r.envoyes||0;
+  // États vides EXPLICITES. Un « — » laisse le lecteur choisir entre « rien envoyé »,
+  // « rien reçu » et « bug » : trois situations qui n'appellent pas la même action.
+  $("#h-foot").innerHTML =
+      !nEnv && !nRepo ? `<b style="color:var(--muted)">Aucune invitation envoyée pour cette campagne.</b> Rien à mesurer pour l'instant.`
+    : !nRepo          ? `<b style="color:var(--muted)">Aucune réponse reçue</b> sur ${nEnv.toLocaleString("fr-FR")} invitation${nEnv>1?"s":""} envoyée${nEnv>1?"s":""}.`
+    : !nRep           ? `<b style="color:var(--muted)">${nRepo} questionnaire${nRepo>1?"s":""} reçu${nRepo>1?"s":""}, mais aucune note NPS exploitable.</b>`
+                        + ` <span class="ctx">Les clients ayant déclaré n'avoir eu aucun contact récent ne se voient pas poser la question.</span>`
+    : `<b>${nRep} note${nRep>1?"s":""} NPS</b> sur ${nRepo} questionnaire${nRepo>1?"s":""} reçu${nRepo>1?"s":""}`
+      + ` : <b style="color:var(--good)">${r.promoteurs||0} promoteurs</b>, ${r.passifs||0} passifs, <b style="color:var(--bad)">${r.detracteurs||0} détracteurs</b>.`
+      + (nRepo>nRep?` <span class="ctx">${nRepo-nRep} questionnaire${nRepo-nRep>1?"s":""} sans note NPS.</span>`:"")
+      // Le dénominateur du taux est le nombre d'invitations ENVOYÉES, et le libellé le
+      // dit : la délivrabilité n'est pas suivie (relais SMTP sans webhook), écrire
+      // « délivrées » serait affirmer ce qu'on ignore.
+      + `<br><span class="ctx">${nRepo} réponse${nRepo>1?"s":""} sur ${nEnv.toLocaleString("fr-FR")} invitation${nEnv>1?"s":""} envoyée${nEnv>1?"s":""}`
+      + (taux!=null?` — <b style="color:${tauxColor(taux)}">${fmt(taux,1)} %</b> de participation`:"")+`.</span>`
+      + (nRep<VOL.conclure
+          ? `<br><b style="color:var(--warn)">Volume insuffisant pour conclure</b> : avec ${nRep} note${nRep>1?"s":""},`
+            + ` chaque nouvelle réponse peut fortement modifier le score. La priorité est d'en obtenir davantage.`
+          : nRep<VOL.tendance
+          ? `<br><span class="ctx">Tendance à confirmer : ${nRep} notes, l'exploitation devient solide à partir de ${VOL.tendance}.</span>`
+          : "");
   // composition
   const tot=(r.promoteurs||0)+(r.passifs||0)+(r.detracteurs||0)||1;
-  const seg=(n,col,lbl,plage)=> n?`<div style="flex:${n}; background:${col}" data-tip="<b>${lbl}</b> — ${plage}<br>${n} réponses · ${Math.round(100*n/tot)}%">${Math.round(100*n/tot)}%</div>`:"";
-  $("#compo").innerHTML=seg(r.promoteurs,cssv("--good"),"Promoteurs","notes 9-10")+seg(r.passifs,cssv("--warn"),"Passifs","notes 7-8")+seg(r.detracteurs,cssv("--bad"),"Détracteurs","notes 0-6");
-  $("#compo-legend").innerHTML=`
-    <span class="it"><span class="sw" style="background:var(--good)"></span>Promoteurs <b>${r.promoteurs||0}</b></span>
-    <span class="it"><span class="sw" style="background:var(--warn)"></span>Passifs <b>${r.passifs||0}</b></span>
-    <span class="it"><span class="sw" style="background:var(--bad)"></span>Détracteurs <b>${r.detracteurs||0}</b></span>`;
-  $("#compo-foot").innerHTML="Le score NPS = <b>% promoteurs − % détracteurs</b>.";
+  // Sur faible volume, le NOMBRE passe devant le pourcentage : « 1 détracteur sur
+  // 3 notes » est fidèle, « 33 % de détracteurs » laisse imaginer un échantillon.
+  const petit=tot<VOL.conclure;
+  const seg=(n,col,lbl,plage)=> n?`<div style="flex:${n}; background:${col}" data-tip="<b>${lbl}</b> — ${plage}<br>${n} sur ${tot} note${tot>1?"s":""} · ${Math.round(100*n/tot)} %">${petit?n:Math.round(100*n/tot)+" %"}</div>`:"";
+  $("#compo").innerHTML=seg(r.promoteurs,cssv("--good"),"Promoteurs","notes 9-10")+seg(r.passifs,cssv("--warn"),"Passifs","notes 7-8")+seg(r.detracteurs,cssv("--bad"),"Détracteurs","notes 0-6")
+    || `<span class="sub">Aucune note NPS à décomposer.</span>`;
+  // La légende suit la barre : si le pourcentage a été jugé trompeur sur la barre, il
+  // l'est aussi entre parenthèses. « Détracteurs 1 (100 %) » était le pire des deux.
+  const it=(col,lbl,n)=>`<span class="it"><span class="sw" style="background:var(${col})"></span>${lbl} <b>${n||0}</b>`
+    + ((r.nps_rep||0)&&!petit?` <span class="sub">(${Math.round(100*(n||0)/tot)} %)</span>`:"")+`</span>`;
+  $("#compo-legend").innerHTML=it("--good","Promoteurs",r.promoteurs)+it("--warn","Passifs",r.passifs)+it("--bad","Détracteurs",r.detracteurs);
+  $("#compo-foot").innerHTML="Le score NPS = <b>% promoteurs − % détracteurs</b>"
+    + ((r.nps_rep||0)?`, sur les ${r.nps_rep} réponse${r.nps_rep>1?"s":""} ayant donné une note.`:".");
   $("#capline").innerHTML=`Indicateurs de la campagne <b>${camp}</b> — évolutions <span class="up" style="font-weight:700">▲</span>/<span class="down" style="font-weight:700">▼</span> ${prevCamp?`vs <b>${prevCamp}</b>`:"(pas de campagne précédente)"}.`;
 }
 
 function renderKPIs(){
   const r=rowFor(camp), rp=rowFor(prevCamp), rsRow=(D.rs.find(x=>x.campagne===camp)||{}), rsPrev=(D.rs.find(x=>x.campagne===prevCamp)||{});
   const K=[];
-  let [st,pill]=stCsat(r.csat_global);
+  // Base des notes de satisfaction : les réponses ayant réellement noté. C'est elle
+  // qui décide si une pastille peut porter un verdict (cf. stVol).
+  const nCsat=r.csat_rep??r.reponses??0;
+  let [st,pill]=stVol(...stCsat(r.csat_global),nCsat);
   // Affichée en %, mais le statut/la couleur restent calés sur la note /5
   // (seuils stCsat 3 et 4 = 50 % et 75 %) : une seule échelle de jugement.
   const satPct=csatPct(r.csat_global);
@@ -889,15 +1052,16 @@ function renderKPIs(){
     // le total des réponses : annoncer 48 pour une moyenne calculée sur 32 revient
     // à créditer la note d'une assise qu'elle n'a pas.
     ctx:`${fmt(r.csat_global,1)}/5 · ${r.csat_rep??r.reponses??0} réponse${(r.csat_rep??r.reponses??0)>1?"s":""} notée${(r.csat_rep??r.reponses??0)>1?"s":""}`,
-    delta:deltaTag(satPct,prevCamp?csatPct(rp.csat_global):null,{unit:" pts"}),
+    delta:deltaTag(satPct,prevCamp?csatPct(rp.csat_global):null,{unit:" pts",fiable:ecartSur(nCsat,rp.csat_rep??rp.reponses)}),
     spark:sparkline(serie("csat_global").map(csatPct),stCol(st))});
-  [st,pill]=stCsat(r.csat_conseiller);
-  K.push({lbl:"Qualité du conseiller",sig:"écoute, clarté",n:fmt(r.csat_conseiller,1),u:"/5",st,pill,ctx:"note du conseiller",delta:deltaTag(r.csat_conseiller,prevCamp?rp.csat_conseiller:null),spark:sparkline(serie("csat_conseiller"),stCol(st))});
+  [st,pill]=stVol(...stCsat(r.csat_conseiller),nCsat);
+  K.push({lbl:"Qualité du conseiller",sig:"écoute, clarté",n:fmt(r.csat_conseiller,1),u:"/5",st,pill,ctx:`note du conseiller · ${nCsat} réponse${nCsat>1?"s":""} notée${nCsat>1?"s":""}`,delta:deltaTag(r.csat_conseiller,prevCamp?rp.csat_conseiller:null,{fiable:ecartSur(nCsat,rp.csat_rep??rp.reponses)}),spark:sparkline(serie("csat_conseiller"),stCol(st))});
   [st,pill]=stTaux(r.taux_reponse);
-  K.push({lbl:"Taux de réponse",sig:"participation",n:r.taux_reponse==null?"—":Math.round(r.taux_reponse),u:"%",st,pill,ctx:`${r.reponses||0} rép. / ${r.envoyes||0} env.`,delta:deltaTag(r.taux_reponse,prevCamp?rp.taux_reponse:null,{unit:" pts"}),spark:sparkline(serie("taux_reponse"),stCol(st))});
-  [st,pill]=stConsent(r.taux_consentement);
-  K.push({lbl:"Recontacts acceptés",sig:"leads générés",n:r.taux_consentement==null?"—":Math.round(r.taux_consentement),u:"%",st,pill,ctx:`${r.consentements||0} leads sur ${r.reponses||0} réponses`,delta:deltaTag(r.taux_consentement,prevCamp?rp.taux_consentement:null,{unit:" pts"}),spark:sparkline(serie("taux_consentement"),stCol(st))});
-  K.push({lbl:"Suivi réseaux sociaux",sig:"notoriété",n:rsRow.taux_suivi==null?"—":Math.round(rsRow.taux_suivi),u:"%",st:"brand",pill:"Notoriété",ctx:`${rsRow.suit||0} / ${rsRow.repondu||0} répondants`,delta:deltaTag(rsRow.taux_suivi,prevCamp?rsPrev.taux_suivi:null,{unit:" pts"}),spark:sparkline(D.campagnes.map(c=>{const x=D.rs.find(y=>y.campagne===c);return x?x.taux_suivi:null;}),cssv("--mauve"))});
+  K.push({lbl:"Taux de réponse",sig:"participation",n:r.taux_reponse==null?"—":Math.round(r.taux_reponse),u:"%",st,pill,ctx:`${(r.reponses||0).toLocaleString("fr-FR")} rép. / ${(r.envoyes||0).toLocaleString("fr-FR")} env.`,delta:deltaTag(r.taux_reponse,prevCamp?rp.taux_reponse:null,{unit:" pts"}),spark:sparkline(serie("taux_reponse"),stCol(st))});
+  // Base = les réponses (chaque répondant se voit poser la question du recontact).
+  [st,pill]=stVol(...stConsent(r.taux_consentement),r.reponses);
+  K.push({lbl:"Recontacts acceptés",sig:"leads générés",n:r.taux_consentement==null?"—":Math.round(r.taux_consentement),u:"%",st,pill,ctx:`${r.consentements||0} leads sur ${r.reponses||0} réponses`,delta:deltaTag(r.taux_consentement,prevCamp?rp.taux_consentement:null,{unit:" pts",fiable:ecartSur(r.reponses,rp.reponses)}),spark:sparkline(serie("taux_consentement"),stCol(st))});
+  K.push({lbl:"Suivi réseaux sociaux",sig:"notoriété",n:rsRow.taux_suivi==null?"—":Math.round(rsRow.taux_suivi),u:"%",st:"brand",pill:"Notoriété",ctx:`${rsRow.suit||0} / ${rsRow.repondu||0} répondants`,delta:deltaTag(rsRow.taux_suivi,prevCamp?rsPrev.taux_suivi:null,{unit:" pts",fiable:ecartSur(rsRow.repondu,rsPrev.repondu)}),spark:sparkline(D.campagnes.map(c=>{const x=D.rs.find(y=>y.campagne===c);return x?x.taux_suivi:null;}),cssv("--mauve"))});
   $("#kpis").innerHTML=K.map(tile).join("");
 }
 
@@ -909,12 +1073,27 @@ function renderSinistre(){
   if(!s.n_clos && !s.reponses){ $("#sin-kpis").innerHTML=`<div class="empty" style="grid-column:1/-1">Pas encore de réponses « sinistre » pour cette campagne. Importez la liste des sinistres clos dans l'onglet Administration.</div>`; $("#sin-insight").innerHTML=""; return; }
   const nr=s.reponses||0, base=`${nr} réponse${nr>1?"s":""} d'indemnisés`;
   const K=[];
-  let [st,pill]=stScore(s.score_nps);
-  K.push({lbl:"Recommandation sinistre",sig:"NPS · indemnisés",n:s.score_nps==null?"—":(s.score_nps>0?"+":"")+s.score_nps,u:"",st,pill,ctx:`réseau : ${(rowFor(camp).score_nps??"—")} · ${s.nps_rep||0} note${(s.nps_rep||0)>1?"s":""}${(s.nps_rep||0)>0&&(s.nps_rep||0)<MIN_FIABLE?" (échantillon faible)":""}`,delta:deltaTag(s.score_nps,prevCamp?sp.score_nps:null,{unit:" pts"})});
-  [st,pill]=stCsat(s.csat_sinistre);
-  K.push({lbl:"Gestion du sinistre",sig:"satisfaction /5",n:fmt(s.csat_sinistre,1),u:"/5",st,pill,ctx:`prise en charge, suivi · ${base}`,delta:deltaTag(s.csat_sinistre,prevCamp?sp.csat_sinistre:null)});
-  [st,pill]=stCsat(s.delai_indemnisation);
-  K.push({lbl:"Délai d'indemnisation ressenti",sig:"note du client /5",n:fmt(s.delai_indemnisation,1),u:"/5",st,pill,ctx:`perception de la rapidité · ${base}`,delta:deltaTag(s.delai_indemnisation,prevCamp?sp.delai_indemnisation:null)});
+  // Le NPS sinistre repose sur une poignée de notes (3 sur la campagne 2026-06 pour
+  // 143 sinistres interrogés). « À redresser » y serait une conclusion sur la gestion
+  // des sinistres tirée de trois personnes : on affiche le signal, pas un verdict.
+  const nSinNps=s.nps_rep||0;
+  const perfSin=performance(s.score_nps,nSinNps);
+  const tauxSin=s.n_clos?100*(s.reponses||0)/s.n_clos:null;
+  K.push({lbl:"Recommandation sinistre",sig:"NPS · indemnisés",
+    n:s.score_nps==null?"—":(s.score_nps>0?"+":"")+Math.round(s.score_nps),u:"",
+    st:perfSin.st, pill: nSinNps&&nSinNps<VOL.conclure
+      ? (s.score_nps<0?"Signal défavorable":"Signal favorable") : perfSin.lbl,
+    ctx:`réseau : ${(rowFor(camp).score_nps==null?"—":Math.round(rowFor(camp).score_nps))} · <b>${nSinNps} note${nSinNps>1?"s":""}</b>`
+      + (nSinNps&&nSinNps<VOL.conclure?` — <span data-tip="Le signal client est défavorable, mais ${nSinNps} note${nSinNps>1?"s":""} ne permet${nSinNps>1?"tent":""} pas de conclure sur l'ensemble des sinistres.">volume insuffisant pour conclure</span>`:"")
+      + (tauxSin!=null?`<br>${s.reponses||0} réponse${(s.reponses||0)>1?"s":""} sur ${s.n_clos} client${s.n_clos>1?"s":""} interrogé${s.n_clos>1?"s":""} — ${fmt(tauxSin,1)} %`:""),
+    delta:deltaTag(s.score_nps,prevCamp?sp.score_nps:null,
+      {unit:" pts", entier:true, fiable:ecartSur(nSinNps,sp.nps_rep)})});
+  // Les deux notes /5 reposent sur les mêmes cinq répondants que le NPS sinistre :
+  // elles n'ont pas plus de droit que lui à conclure sur la gestion des sinistres.
+  [st,pill]=stVol(...stCsat(s.csat_sinistre),nr);
+  K.push({lbl:"Gestion du sinistre",sig:"satisfaction /5",n:fmt(s.csat_sinistre,1),u:"/5",st,pill,ctx:`prise en charge, suivi · ${base}`,delta:deltaTag(s.csat_sinistre,prevCamp?sp.csat_sinistre:null,{fiable:ecartSur(nr,sp.reponses)})});
+  [st,pill]=stVol(...stCsat(s.delai_indemnisation),nr);
+  K.push({lbl:"Délai d'indemnisation ressenti",sig:"note du client /5",n:fmt(s.delai_indemnisation,1),u:"/5",st,pill,ctx:`perception de la rapidité · ${base}`,delta:deltaTag(s.delai_indemnisation,prevCamp?sp.delai_indemnisation:null,{fiable:ecartSur(nr,sp.reponses)})});
   // Délai de traitement : la MÉDIANE est l'indicateur de pilotage, pas la moyenne.
   // Sur 2026-06 : moyenne 329 j, médiane 102 j, p90 766 j — la moyenne est tirée par
   // les dossiers ouverts en 2016-2019 et clos en juin 2026. Elle reste affichée mais
@@ -923,7 +1102,13 @@ function renderSinistre(){
   // aussi (102 j pour un objectif de 30) — c'est voulu : le délai est réellement
   // trop long, la moyenne exagérait le problème sans l'inventer.
   [st,pill]=stDelai(s.delai_median);
-  K.push({lbl:"Délai réel médian",sig:"clôture − ouverture",n:s.delai_median==null?"—":Math.round(s.delai_median),u:"j",st,pill,ctx:`objectif < 30 j${s.delai_p90!=null?` · <span data-tip="9 sinistres clos sur 10 l'ont été en moins de ${Math.round(s.delai_p90)} jours.">9 sur 10 &lt; ${Math.round(s.delai_p90)} j</span>`:""}`,delta:deltaTag(s.delai_median,prevCamp?sp.delai_median:null,{unit:" j",invert:true})});
+  K.push({lbl:"Délai réel médian",sig:"clôture − ouverture",n:s.delai_median==null?"—":Math.round(s.delai_median),u:"j",st,pill,
+    // « 9 sur 10 < 766 j » se lisait comme un ratio de dossiers conformes. Le
+    // percentile est nommé et énoncé en clair : c'est un délai, pas une proportion.
+    ctx:`objectif global provisoire < 30 j`
+      + (s.delai_median!=null?` · <span data-tip="La moitié des sinistres a été clôturée en moins de ${Math.round(s.delai_median)} jours, l'autre moitié en plus. La médiane est l'indicateur de pilotage : contrairement à la moyenne, un contentieux de dix ans ne la déplace pas.">médiane</span>`:"")
+      + (s.delai_p90!=null?`<br><span data-tip="Délai au 90ᵉ percentile : 10 % des dossiers clos ont demandé plus de ${Math.round(s.delai_p90)} jours. Sert à mesurer la traîne, que la médiane masque.">90 % des dossiers clôturés en moins de ${Math.round(s.delai_p90)} j</span>`:""),
+    delta:deltaTag(s.delai_median,prevCamp?sp.delai_median:null,{unit:" j",invert:true})});
   K.push({lbl:"Délai réel moyen",sig:"clôture − ouverture",n:s.delai_reel==null?"—":Math.round(s.delai_reel),u:"j",st:"flat",pill:"Moyenne",ctx:`<span data-tip="Moyenne sur tous les sinistres clos, dossiers anciens inclus. À lire avec la médiane : un contentieux de dix ans pèse autant que cent dossiers réglés en une semaine.">tirée par les dossiers anciens</span>`,delta:deltaTag(s.delai_reel,prevCamp?sp.delai_reel:null,{unit:" j",invert:true})});
   K.push({lbl:"Sinistres interrogés",sig:"volume",n:s.n_clos||nr,u:"",st:"brand",pill:"Sinistres clos",ctx:base,delta:""});
   $("#sin-kpis").innerHTML=K.map(tile).join("");
@@ -931,7 +1116,12 @@ function renderSinistre(){
   // client typique, donc le seul comparable à une note de ressenti.
   const dr=s.delai_median, dp=s.delai_indemnisation;
   $("#sin-insight").innerHTML= (dr!=null||dp!=null)
-    ? `<b>Perçu vs réel</b> — délai ressenti <b>${fmt(dp,1)}/5</b>${dr!=null?` pour un traitement réel de <b>${Math.round(dr)} j</b> pour la moitié des dossiers (objectif 30)`:""}. Le NPS sinistre (${s.score_nps==null?"—":(s.score_nps>0?"+":"")+s.score_nps}) est à comparer au réseau (${rowFor(camp).score_nps??"—"}) : l'indemnisation est un levier clé.`
+    ? `<b>Perçu vs réel</b> — délai ressenti <b>${fmt(dp,1)}/5</b>${dr!=null?` pour un traitement réel de <b>${Math.round(dr)} j</b> pour la moitié des dossiers (objectif 30)`:""}.`
+      // La comparaison des deux NPS n'est proposée QUE si le volet sinistre en porte
+      // assez : « −33 contre +45 » sur trois notes désignerait un coupable au hasard.
+      + (classable(s.nps_rep)
+          ? ` Le NPS sinistre (${s.score_nps==null?"—":(s.score_nps>0?"+":"")+Math.round(s.score_nps)}) est à comparer au réseau (${rowFor(camp).score_nps==null?"—":Math.round(rowFor(camp).score_nps)}) : l'indemnisation est un levier clé.`
+          : ` Le NPS des indemnisés (${s.nps_rep||0} note${(s.nps_rep||0)>1?"s":""}) reste trop peu fourni pour être comparé au réseau.`)
     : "";
 }
 
@@ -947,7 +1137,7 @@ function renderBD(){
     rows=[norm2({name:"Réseau ANSET",n:r.reponses,nNps:r.nps_rep,score:r.score_nps,csat:r.csat_global,csatSin:s.csat_sinistre,nSin:s.reponses,delai:s.delai_reel,taux:r.taux_reponse})]; }
   else if(granLevel==="zone"){ hdr="Zone"; const z=D.zones.filter(x=>x.campagne===camp&&x.zone); sub=`${z.length} zone(s)`;
     rows=z.map(x=>norm2({name:x.zone,n:x.reponses,nNps:x.nps_rep,score:x.score_nps,csat:x.csat_global,csatSin:x.csat_sinistre,nSin:x.n_sinistre,delai:x.delai_reel,taux:x.taux_reponse})); }
-  else if(granLevel==="agence"){ hdr="Agence"; const a=D.agences.filter(x=>x.campagne===camp); sub=`${a.length} agence(s) · triées par score`;
+  else if(granLevel==="agence"){ hdr="Agence"; const a=D.agences.filter(x=>x.campagne===camp); sub=`${a.length} agence(s)`;
     // `score_nps` est l'alias aligné sur les autres vues ; `nps_score` reste lu en
     // repli si la migration d'alignement n'est pas encore appliquée. Idem `nps_rep`,
     // ajouté à la vue agence par 20260729190000 : à défaut on le recompose depuis
@@ -959,38 +1149,83 @@ function renderBD(){
     // travailler pour plusieurs agences (ou pour l'équipe Commerciaux). L'afficher
     // laissait croire à un rattachement fiable.
     rows=c.map(x=>norm2({name:x.conseiller_nom||x.conseiller_id,n:x.reponses,nNps:x.nps_rep,score:x.score_nps,csat:x.csat_global,csatSin:x.csat_sinistre,nSin:x.n_sinistre,delai:x.delai_reel,taux:x.taux_reponse})); }
-  rows.sort((a,b)=>(b.score??-999)-(a.score??-999));
-  $("#gran-sub").textContent=`Campagne ${camp} · ${sub}`;
+  // TRI EN DEUX BLOCS. Les périmètres non classables ne sont pas mêlés au classement :
+  // les ordonner par score ferait apparaître une agence à +100 sur une note au-dessus
+  // d'une agence à +40 sur soixante. Ils passent après, triés par volume décroissant —
+  // c'est le nombre de notes qui les intéresse, puisque c'est ce qui leur manque.
+  rows.sort((a,b)=>{
+    const ca=classable(a.nNps??a.n), cb=classable(b.nNps??b.n);
+    if(ca!==cb) return ca?-1:1;
+    if(!ca) return (b.nNps??b.n??0)-(a.nNps??a.n??0);
+    return (b.score??-999)-(a.score??-999);
+  });
+  const nClasses=rows.filter(x=>classable(x.nNps??x.n)).length;
   // « Réponses » compte les réponses rattachées à l'agence DÉCLARÉE par le client ;
   // « Taux rép. » rapporte les réponses aux invitations de l'agence du FICHIER, des
   // deux côtés du ratio. Les deux nombres peuvent donc différer pour une agence :
   // c'est voulu, un pourcentage doit comparer la même population.
   const head=`<thead><tr><th>${hdr}</th>`
-    + `<th data-tip="Nombre de réponses reçues, et entre parenthèses celles qui contiennent une note NPS.<br>Un client déclarant n'avoir eu aucun contact récent n'est interrogé sur rien : sa réponse compte ici, mais pas dans les notes.">Réponses</th>`
-    + `<th data-tip="Score NPS = % promoteurs − % détracteurs, calculé sur les seules réponses NOTÉES.<br>« * » signale moins de ${MIN_FIABLE} notes NPS.">Score NPS</th>`
+    + `<th data-tip="Nombre de questionnaires reçus. Un client déclarant n'avoir eu aucun contact récent n'est interrogé sur rien : sa réponse compte ici, mais pas dans les notes NPS.">Réponses</th>`
+    + `<th data-tip="Réponses contenant une note NPS. C'est le dénominateur du score, et le nombre qui décide si le périmètre est classable (${VOL.conclure} minimum).">Notes NPS</th>`
+    + `<th data-tip="Score NPS = % promoteurs − % détracteurs, calculé sur les seules réponses NOTÉES. Affiché en entier ; valeur exacte dans l'infobulle du score.">Score NPS</th>`
+    + `<th data-tip="Ce que vaut la mesure, indépendamment du score : moins de ${VOL.conclure} notes → insuffisante ; moins de ${VOL.tendance} → à confirmer ; au-delà, la participation prend le relais.">Fiabilité</th>`
     + `<th>Satisfaction</th>`
     + `<th data-tip="Gestion du sinistre notée /5 par les clients réellement indemnisés (invités depuis la liste des sinistres clos).<br>« — » = ce périmètre n'a traité aucun sinistre : un gestionnaire de quittances n'a pas de note sinistre.">Sat. sinistre</th>`
     + `<th data-tip="Délai MOYEN entre ouverture et clôture des sinistres du périmètre. Sensible aux dossiers anciens : voir la médiane dans la carte « Gestion des sinistres » pour le délai du dossier typique.">Délai réel</th>`
     + `<th data-tip="Réponses rapportées aux invitations envoyées, sur l'agence d'origine de l'envoi.">Taux rép.</th></tr></thead>`;
   const body=rows.length? rows.map(x=>{
     const nm=x.sub?`${esc(x.name)} <span class="agc">${esc(x.sub)}</span>`:esc(x.name);
-    // Le « * » et son avertissement portent sur `nNps`, et ne s'affichent que si un
-    // score existe : « — * » n'avait aucun sens (rien à lire avec prudence).
-    const nn=x.nNps??x.n??0, faible=nn>0&&nn<MIN_FIABLE;
-    return `<tr><td>${nm}</td><td class="num">${x.n??0}${(x.n??0)>nn?` <span class="agc">(${nn?`${nn} notée${nn>1?"s":""}`:"aucune notée"})</span>`:""}</td>
-      <td><span class="cchip" style="background:color-mix(in srgb,${scoreColor(x.score)} 16%,transparent);color:${scoreColor(x.score)}"${x.score!=null&&faible?` data-tip="Échantillon faible : ${nn} note${nn>1?"s":""} NPS sur ${x.n??0} réponse(s). Score à lire avec prudence."`:""}>${x.score==null?"—":(x.score>0?"+":"")+x.score}${x.score!=null&&faible?" *":""}</span></td>
-      <td class="num" style="color:${csatColor(x.csat)}">${fmt(x.csat,1)}</td>
-      <td class="num" style="color:${csatColor(x.csatSin)}"${x.csatSin!=null?` data-tip="Sur ${x.nSin??0} réponse(s) de clients indemnisés."`:""}>${fmt(x.csatSin,1)}</td>
+    // Le volume de NOTES commande tout ici : classement, couleur du score, libellé de
+    // fiabilité. `x.n` (réponses) n'est qu'un repli pour les vues qui ne portent pas
+    // encore `nps_rep`.
+    const nn=x.nNps??x.n??0, ok=classable(nn);
+    const fia=fiabilite(nn,x.taux), fc=stCol(fia.st);
+    // Un score non classable reste AFFICHÉ — le masquer priverait d'une information —
+    // mais il est neutralisé visuellement et explicitement dit non classé : c'est la
+    // couleur verte sur « +100 pour une note » qui trompe, pas le chiffre lui-même.
+    const col=ok?scoreColor(x.score):cssv("--muted");
+    return `<tr><td>${nm}</td>
+      <td class="num">${x.n??0}</td>
+      <td class="num"${nn===0?` style="color:var(--muted)"`:""}>${nn||"—"}</td>
+      <td><span class="cchip" style="background:color-mix(in srgb,${col} 16%,transparent);color:${col}"
+        data-tip="${x.score==null?"Aucune note NPS : score non calculable."
+          :`Valeur exacte : ${(x.score>0?"+":"")}${fmt(x.score,1)} sur ${nn} note${nn>1?"s":""}.`
+          +(ok?"":` Moins de ${VOL.conclure} notes : périmètre non classé.`)}"
+        >${x.score==null?"—":(x.score>0?"+":"")+Math.round(x.score)}</span></td>
+      <td><span class="cchip" style="background:color-mix(in srgb,${fc} 16%,transparent);color:${fc}"
+        data-tip="${esc(fia.pourquoi)}">${ok||!nn?esc(fia.lbl):"Non classé"}</span></td>
+      <td class="num" style="color:${classable(x.n)?csatColor(x.csat):cssv("--muted")}"${x.csat!=null&&!classable(x.n)?` data-tip="Sur ${x.n??0} réponse(s) : la note est affichée, mais moins de ${VOL.conclure} réponses ne permettent pas de la comparer aux autres périmètres."`:""}>${fmt(x.csat,1)}</td>
+      <td class="num" style="color:${classable(x.nSin)?csatColor(x.csatSin):cssv("--muted")}"${x.csatSin!=null?` data-tip="Sur ${x.nSin??0} réponse(s) de clients indemnisés.${classable(x.nSin)?"":` Moins de ${VOL.conclure} : note provisoire.`}"`:""}>${fmt(x.csatSin,1)}</td>
       <td class="num" style="color:${delaiColor(x.delai)}">${x.delai==null?"—":Math.round(x.delai)+" j"}</td>
       <td class="num" style="color:${tauxColor(x.taux)}">${x.taux==null?"—":Math.round(x.taux)+" %"}</td></tr>`;
-  }).join("") : `<tr><td colspan="7" class="empty">Aucune donnée.</td></tr>`;
+  }).join("") : `<tr><td colspan="9" class="empty">Aucune réponse reçue pour cette campagne : rien à comparer.</td></tr>`;
   $("#bd").innerHTML=head+"<tbody>"+body+"</tbody>";
+  // Dire combien de lignes sont réellement classées : sans ce compte, un tableau
+  // presque entièrement « non classé » se lit comme un classement complet.
+  // Le décompte n'a de sens que sur un CLASSEMENT : au niveau réseau, « 1 classé sur
+  // 1 » est du bruit. L'accord suit le périmètre (une zone, une agence, un conseiller).
+  const fem=granLevel==="zone"||granLevel==="agence", e=fem?"e":"";
+  $("#gran-sub").textContent=`Campagne ${camp} · ${sub}`
+    + (rows.length>1?` · ${nClasses} classé${e}${nClasses>1?"s":""} sur ${rows.length}`
+        +(nClasses<rows.length?` (${VOL.conclure} notes NPS minimum)`:""):"");
 }
 
 function renderTrend(){
-  const data=D.campagnes.map(c=>({c,m:moisCourt(c),v:(rowFor(c).score_nps)})).filter(d=>d.v!=null);
+  // Le volume de notes suit chaque point : une campagne à peine ouverte donne un NPS
+  // extrême (1 détracteur = −100) qui, relié aux mois pleins, dessine un effondrement
+  // que personne n'a mesuré. Le point reste — il situe le mois — mais il est creux.
+  const data=D.campagnes.map(c=>{const r=rowFor(c); return {c,m:moisCourt(c),v:r.score_nps,n:r.nps_rep||0};})
+    .filter(d=>d.v!=null);
   const cont=$("#chart-trend");
-  if(data.length<1){ cont.innerHTML='<div class="empty">Pas encore de données.</div>'; return; }
+  // Une seule campagne ne fait pas une tendance : un point isolé relié à rien se lit
+  // comme une courbe plate, donc comme une stabilité observée. Elle n'est pas observée.
+  if(data.length<2){
+    cont.innerHTML=`<div class="empty">Historique insuffisant pour afficher une tendance`
+      + (data.length===1?` — une seule campagne disponible (${esc(data[0].c)}, NPS ${(data[0].v>0?"+":"")+Math.round(data[0].v)}).`
+                        :` — aucune campagne avec un score NPS.`)
+      + `<br><span class="sub">La courbe apparaîtra à partir de la deuxième campagne diffusée.</span></div>`;
+    return;
+  }
   const w=560,h=214,pl=30,pr=16,pt=18,pb=28,n=data.length,target=CIBLE_NPS;
   // 0 et la cible restent dans l'échelle : la ligne pointillée est toujours visible.
   const vals=data.map(d=>d.v).concat([0,target]); let lo=Math.min(...vals),hi=Math.max(...vals); const pad=(hi-lo)*.15||10; lo-=pad; hi+=pad;
@@ -998,20 +1233,50 @@ function renderTrend(){
   const Y=v=> pt+(1-(v-lo)/((hi-lo)||1))*(h-pt-pb);
   const P=data.map((d,i)=>[X(i),Y(d.v)]);
   const line=smooth(P), area=line+` L ${X(n-1).toFixed(1)},${Y(lo).toFixed(1)} L ${X(0).toFixed(1)},${Y(lo).toFixed(1)} Z`;
+  // Le trait plein ne relie que les campagnes qui concluent ; tout segment touchant un
+  // point provisoire est pointillé et gris. Un point creux au bout d'une belle courbe
+  // pleine reste lu comme une chute observée : c'est la PENTE qu'on croit, pas le
+  // marqueur. Les segments sont droits, une courbe lissée vers une valeur provisoire
+  // inventerait en plus une trajectoire.
+  const runs=[]; { let acc=[];
+    data.forEach((d,i)=>{ if(classable(d.n)) acc.push(i); else { if(acc.length) runs.push(acc); acc=[]; } });
+    if(acc.length) runs.push(acc); }
+  const solide=runs.filter(r=>r.length>1).map(r=>smooth(r.map(i=>P[i]))).join(" ");
+  const pointille=data.slice(1).map((d,k)=>{ const i=k+1;
+    return (classable(d.n)&&classable(data[i-1].n)) ? ""
+      : `M${P[i-1][0].toFixed(1)},${P[i-1][1].toFixed(1)} L${P[i][0].toFixed(1)},${P[i][1].toFixed(1)}`;}).join(" ").trim();
   const gy=[lo,(lo+hi)/2,hi].map(v=>`<line x1="${pl}" y1="${Y(v).toFixed(1)}" x2="${w-pr}" y2="${Y(v).toFixed(1)}" stroke="var(--border)"/><text x="${pl-6}" y="${(Y(v)+3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--faint)">${v.toFixed(0)}</text>`).join("");
-  const dots=data.map((d,i)=>`<circle cx="${X(i).toFixed(1)}" cy="${Y(d.v).toFixed(1)}" r="${i===n-1?5:3.5}" fill="${i===n-1?'var(--good)':'var(--blue)'}" stroke="var(--surface)" stroke-width="2"/>`).join("");
+  // Point creux = campagne non concluante. C'est la convention graphique usuelle pour
+  // « valeur provisoire », et elle survit au noir et blanc comme au daltonisme.
+  const dots=data.map((d,i)=>{ const ok=classable(d.n);
+    return `<circle cx="${X(i).toFixed(1)}" cy="${Y(d.v).toFixed(1)}" r="${i===n-1?5:3.5}"
+      fill="${ok?(i===n-1?'var(--good)':'var(--blue)'):'var(--surface)'}"
+      stroke="${ok?'var(--surface)':'var(--muted)'}" stroke-width="2"/>`;}).join("");
   const xlbl=data.map((d,i)=>`<text x="${X(i).toFixed(1)}" y="${h-8}" text-anchor="middle" font-size="11" fill="var(--muted)">${d.m}</text>`).join("");
   const step=n>1?(w-pl-pr)/(n-1):(w-pl-pr);
-  const hits=data.map((d,i)=>{const prev=i>0?data[i-1].v:null,dd=prev==null?"":(d.v-prev>=0?`▲ +${d.v-prev}`:`▼ ${d.v-prev}`);
-    return `<rect x="${(X(i)-step/2).toFixed(1)}" y="${pt}" width="${step.toFixed(1)}" height="${(h-pt-pb).toFixed(1)}" fill="transparent" data-i="${i}" data-tip="<b>${d.c}</b><br>Score NPS <b>${d.v>0?'+':''}${d.v}</b>${prev!=null?` · ${dd}`:''}"/>`;}).join("");
+  // L'écart entre deux points se lit sur les valeurs arrondies, comme partout, et
+  // n'est proposé que si les DEUX mois concluent : sinon c'est le volume qui a bougé.
+  const hits=data.map((d,i)=>{const p=i>0?data[i-1]:null;
+    const ecart=(p&&classable(d.n)&&classable(p.n))?Math.round(d.v)-Math.round(p.v):null;
+    return `<rect x="${(X(i)-step/2).toFixed(1)}" y="${pt}" width="${step.toFixed(1)}" height="${(h-pt-pb).toFixed(1)}" fill="transparent" data-i="${i}"`
+      + ` data-tip="<b>${d.c}</b><br>Score NPS <b>${d.v>0?'+':''}${fmt(d.v,1)}</b> sur ${d.n} note${d.n>1?'s':''}`
+      + (ecart!=null?`<br>${ecart>=0?`▲ +${ecart}`:`▼ ${ecart}`} pts vs ${p.m}`:"")
+      + (classable(d.n)?"":`<br>Moins de ${VOL.conclure} notes : point provisoire, à ne pas lire comme une évolution.`)
+      + `"/>`;}).join("");
   const tgt=(target>=lo&&target<=hi)?`<line x1="${pl}" y1="${Y(target).toFixed(1)}" x2="${w-pr}" y2="${Y(target).toFixed(1)}" stroke="var(--good)" stroke-width="1.5" stroke-dasharray="5 4"/><text x="${w-pr}" y="${(Y(target)-6).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--good)" font-weight="700">Objectif ${target}</text>`:"";
   cont.innerHTML=`<svg width="100%" viewBox="0 0 ${w} ${h}" style="max-width:100%; overflow:visible">
     <defs><linearGradient id="gl" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="var(--blue)"/><stop offset="1" stop-color="var(--mauve)"/></linearGradient>
       <linearGradient id="ga" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--mauve)" stop-opacity=".18"/><stop offset="1" stop-color="var(--blue)" stop-opacity="0"/></linearGradient></defs>
-    ${gy}${tgt}<path d="${area}" fill="url(#ga)"/><path d="${line}" fill="none" stroke="url(#gl)" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"/>
+    ${gy}${tgt}<path d="${area}" fill="url(#ga)"/>
+    ${solide?`<path d="${solide}" fill="none" stroke="url(#gl)" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"/>`:""}
+    ${pointille?`<path d="${pointille}" fill="none" stroke="var(--muted)" stroke-width="2" stroke-dasharray="6 5" stroke-linecap="round"/>`:""}
     <line id="trc" x1="0" y1="${pt}" x2="0" y2="${(h-pb).toFixed(1)}" stroke="var(--muted)" stroke-dasharray="3 3" style="display:none"/>
     <circle id="trh" r="6.5" fill="none" stroke="var(--blue)" stroke-width="2" style="display:none"/>
-    ${dots}${xlbl}${hits}</svg>`;
+    ${dots}${xlbl}${hits}</svg>`
+    // Une convention graphique non légendée n'est pas une convention. La mention
+    // n'apparaît que s'il y a effectivement un point creux à expliquer.
+    + (data.some(d=>!classable(d.n))
+        ? `<p class="sub" style="margin:6px 0 0">Le tracé en pointillé rejoint des campagnes de moins de ${VOL.conclure} notes (points creux) : elles situent le mois, elles ne mesurent pas une évolution.</p>` : "");
   const cr=cont.querySelector("#trc"), hl=cont.querySelector("#trh");
   cont.querySelectorAll("rect[data-i]").forEach(rc=>rc.addEventListener("mouseenter",()=>{const i=+rc.dataset.i;
     cr.setAttribute("x1",X(i));cr.setAttribute("x2",X(i));cr.style.display="";hl.setAttribute("cx",X(i));hl.setAttribute("cy",Y(data[i].v));hl.style.display="";}));
@@ -1022,15 +1287,27 @@ function renderAgences(){
   // `n` = notes NPS (base réelle du score affiché), pas le total des réponses.
   const ag=D.agences.filter(x=>x.campagne===camp).map(x=>({a:x.agence,v:x.score_nps??x.nps_score,
       n:x.nps_rep??((x.promoteurs||0)+(x.passifs||0)+(x.detracteurs||0))}))
-    .filter(x=>x.v!=null).sort((a,b)=>b.v-a.v);
-  $("#bars-sub").textContent=`Campagne ${camp} · score NPS`;
-  if(!ag.length){ $("#bars").innerHTML='<div class="empty">Aucune donnée agence.</div>'; return; }
+    .filter(x=>x.v!=null);
+  // Même règle que le tableau : les agences non classables sortent du classement au
+  // lieu d'en occuper la tête. Une barre est un rang visuel — la première lue est
+  // « la meilleure agence », et ce jugement ne se rattrape pas dans une infobulle.
+  ag.sort((a,b)=>{
+    const ca=classable(a.n), cb=classable(b.n);
+    if(ca!==cb) return ca?-1:1;
+    return ca ? b.v-a.v : b.n-a.n;
+  });
+  const nCl=ag.filter(x=>classable(x.n)).length;
+  $("#bars-sub").textContent=`Campagne ${camp} · score NPS`
+    + (nCl<ag.length?` · ${nCl} agence${nCl>1?"s":""} classée${nCl>1?"s":""} sur ${ag.length}`:"");
+  if(!ag.length){ $("#bars").innerHTML='<div class="empty">Aucune agence n\'a de note NPS sur cette campagne.</div>'; return; }
   $("#bars").innerHTML=ag.map(d=>{ const posPct=(d.v+100)/2, left=Math.min(50,posPct), width=Math.abs(posPct-50);
-    const verd=d.v<0?"à redresser":d.v<CIBLE_NPS?"correct":"bon";
-    return `<div class="bar" data-tip="<b>${esc(d.a)}</b><br>Score NPS ${d.v>0?'+':''}${d.v} · ${verd}<br>Sur ${d.n} note${d.n>1?'s':''} NPS${d.n<MIN_FIABLE?' — échantillon faible':''}">
-      <span>${esc(d.a)}</span>
-      <div class="track"><div class="zero" style="left:50%"></div><div class="fill" style="left:${left}%;width:${width}%;background:${scoreColor(d.v)}"></div></div>
-      <span class="val num" style="color:${scoreColor(d.v)}">${d.v>0?'+':''}${d.v}</span></div>`;
+    const ok=classable(d.n), col=ok?scoreColor(d.v):cssv("--muted");
+    const verd=ok?(d.v<0?"à redresser":d.v<CIBLE_NPS?"correct":"bon")
+                 :`non classée — ${VOL.conclure} notes minimum`;
+    return `<div class="bar" data-tip="<b>${esc(d.a)}</b><br>Score NPS ${d.v>0?'+':''}${fmt(d.v,1)} · ${verd}<br>Sur ${d.n} note${d.n>1?'s':''} NPS">
+      <span>${esc(d.a)}${ok?"":` <span class="agc">${d.n} note${d.n>1?"s":""}</span>`}</span>
+      <div class="track"><div class="zero" style="left:50%"></div><div class="fill" style="left:${left}%;width:${width}%;background:${col}${ok?"":";opacity:.45"}"></div></div>
+      <span class="val num" style="color:${col}">${d.v>0?'+':''}${Math.round(d.v)}</span></div>`;
   }).join("");
 }
 
@@ -1082,40 +1359,73 @@ function renderMoi(){
 
   // --- Hero : mon score, l'objectif, le réseau --------------------------------
   const s=r.score_nps==null?null:Number(r.score_nps), sr=res.score_nps==null?null:Number(res.score_nps);
-  $("#m-score").textContent=(s==null?"—":(s>0?"+":"")+s); $("#m-score").style.color=scoreColor(s);
-  const [st0,verd]=stScore(s), c0=stCol(st0);
-  $("#m-side").innerHTML=`
-    <div class="verdict" style="background:color-mix(in srgb,${c0} 16%,transparent);color:${c0}">
-      <span class="ic" style="background:${c0}"></span>${verd}</div>
-    <div>${deltaTag(s, mPrev?(rp.score_nps==null?null:Number(rp.score_nps)):null, {unit:" pts", vs:mPrev})}</div>`;
+  const nNps0=r.nps_rep||0;
+  $("#m-score").textContent=(s==null?"—":(s>0?"+":"")+Math.round(s));
+  // Même règle que côté réseau, et plus impérieuse encore : un −33 rouge vif désigne
+  // une personne. Sous le seuil, le chiffre reste, la couleur s'efface.
+  $("#m-score").style.color=classable(nNps0)?scoreColor(s):cssv("--muted");
+  $("#m-score").setAttribute("data-tip", s==null?"Aucune note NPS : score non calculable."
+    :`Valeur exacte : ${(s>0?"+":"")}${fmt(s,1)}, sur ${nNps0} note${nNps0>1?"s":""}.`);
+  // Deux dimensions ici aussi, et pour une raison plus forte que côté manager : un
+  // « À redresser » adressé à une personne sur trois réponses est un jugement, pas
+  // une mesure.
+  const perf0=performance(s,nNps0), fia0=fiabilite(nNps0,r.taux_reponse);
+  $("#m-side").innerHTML=`<div class="verdicts">`
+    + badge(perf0.st,"Performance",perf0.lbl,s==null?"":`Score ${(s>0?"+":"")}${fmt(s,1)} — objectif ${CIBLE_NPS}`)
+    + badge(fia0.st,"Fiabilité",fia0.lbl,fia0.pourquoi)
+    + `</div><div>${deltaTag(s, mPrev?(rp.score_nps==null?null:Number(rp.score_nps)):null,
+        {unit:" pts", vs:mPrev, entier:true, fiable:ecartSur(nNps0,rp.nps_rep)})}</div>`;
+  $("#m-scale").classList.toggle("provisoire", nNps0>0 && nNps0<VOL.conclure);
   $("#m-mark").style.left=posNps(s)+"%";
   $("#m-reseau").style.display=sr==null?"none":"";
   $("#m-reseau").style.left=posNps(sr)+"%";
 
   const nRep=r.nps_rep||0, tot=r.reponses||0;
-  const ecart = (s!=null&&sr!=null) ? Math.round((s-sr)*10)/10 : null;
+  // L'écart se calcule sur les valeurs AFFICHÉES (arrondies), pas sur les exactes :
+  // lire « +33 » et « +45 » puis « 11,7 pts en dessous » donne l'impression que l'un
+  // des trois nombres est faux. La précision perdue est sans portée décisionnelle.
+  const ecart = (s!=null&&sr!=null) ? Math.round(s)-Math.round(sr) : null;
   $("#m-foot").innerHTML=`Sur <b>${nRep} note${nRep>1?"s":""} NPS</b>`
     + (tot>nRep?` <span class="ctx">(${tot} réponse${tot>1?"s":""} au total, ${tot-nRep} sans note)</span>`:"")
     + `. `
-    + (sr==null?"":`Réseau : <b>${(sr>0?"+":"")+sr}</b> <span class="ctx">(repère bleu clair sur la jauge)</span>`
-        + (ecart==null?"." : ecart>0?` — vous êtes <b style="color:var(--good)">${fmt(Math.abs(ecart),1)} pt${Math.abs(ecart)>1?"s":""} au-dessus</b>.`
-          : ecart<0?` — vous êtes <b style="color:var(--bad)">${fmt(Math.abs(ecart),1)} pt${Math.abs(ecart)>1?"s":""} en dessous</b>.`
-          : ` — vous êtes <b>au niveau du réseau</b>.`))
-    + (nRep>0 && nRep<MIN_FIABLE ? ` <b style="color:var(--warn)">Échantillon faible</b> : chaque réponse déplace fortement le score.` : "")
-    + (nRep===0 ? ` <b style="color:var(--muted)">Aucune note NPS pour l'instant.</b>` : "");
+    // Écart coloré seulement s'il est interprétable : au-dessous du seuil, il mesure
+    // surtout le hasard, et le vert ou le rouge en feraient un mérite ou une faute.
+    + (sr==null?"":`Réseau : <b>${(sr>0?"+":"")+Math.round(sr)}</b> <span class="ctx">(repère bleu clair sur la jauge)</span>`
+        + (()=>{ if(ecart==null) return ".";
+            if(ecart===0) return ` — vous êtes <b>au niveau du réseau</b>.`;
+            const col=classable(nRep)?(ecart>0?"var(--good)":"var(--bad)"):"var(--muted)";
+            const n=Math.abs(ecart);
+            return ` — vous êtes <b style="color:${col}">${n} pt${n>1?"s":""} ${ecart>0?"au-dessus":"en dessous"}</b>.`; })())
+    // Comparaison au réseau signalée comme INDICATIVE quand les volumes n'ont rien de
+    // comparable : 3 notes contre 46, l'écart mesure surtout le hasard.
+    + (nRep>0 && nRep<VOL.conclure && sr!=null
+        ? ` <span class="ctx">Comparaison indicative — ${nRep} note${nRep>1?"s":""} de votre côté contre ${res.nps_rep||0} pour le réseau.</span>` : "")
+    // Message d'orientation, pas de reproche : ce qui manque est une donnée, et
+    // l'obtenir ne dépend qu'en partie du conseiller.
+    + (nRep>0 && nRep<VOL.conclure
+        ? `<br><b style="color:var(--warn)">Résultat provisoire.</b> Votre priorité est d'obtenir davantage de réponses`
+          + ` afin de stabiliser votre résultat : avec ${nRep} note${nRep>1?"s":""}, chaque nouvelle réponse peut fortement déplacer le score.` : "")
+    + (nRep===0 ? `<br><b style="color:var(--muted)">Aucune note NPS pour l'instant.</b> `
+        + (tot?`Vos ${tot} réponse${tot>1?"s":""} ne contiennent pas de note : les clients ayant déclaré n'avoir eu aucun contact récent ne se voient pas poser la question.`
+             :`Dès qu'un client répondra, votre score apparaîtra ici.`) : "");
 
   // --- Composition ------------------------------------------------------------
   // `v_satisfaction_conseiller` ne porte pas les passifs : ils se déduisent des
   // notes NPS moins les deux extrêmes (7-8 par construction du NPS).
   const pro=r.promoteurs||0, det=r.detracteurs||0, pas=Math.max(0,nRep-pro-det), base=nRep||1;
-  const seg=(n,col,lbl,plage)=> n?`<div style="flex:${n}; background:${col}" data-tip="<b>${lbl}</b> — ${plage}<br>${n} réponse${n>1?"s":""} · ${Math.round(100*n/base)}%">${Math.round(100*n/base)}%</div>`:"";
+  // Même règle que côté réseau : sous le seuil, la barre porte le NOMBRE. « 33 % de
+  // détracteurs » sur trois notes se lit comme une proportion mesurée ; « 1 » se lit
+  // pour ce que c'est — un client mécontent, qu'il faut prendre au sérieux sans en
+  // faire une statistique.
+  const petit=nRep<VOL.conclure;
+  const seg=(n,col,lbl,plage)=> n?`<div style="flex:${n}; background:${col}" data-tip="<b>${lbl}</b> — ${plage}<br>${n} sur ${nRep} note${nRep>1?"s":""} · ${Math.round(100*n/base)} %">${petit?n:Math.round(100*n/base)+" %"}</div>`:"";
   $("#m-compo").innerHTML=seg(pro,cssv("--good"),"Promoteurs","notes 9-10")+seg(pas,cssv("--warn"),"Passifs","notes 7-8")+seg(det,cssv("--bad"),"Détracteurs","notes 0-6")
     || `<div style="flex:1; background:var(--faint)">aucune note</div>`;
-  $("#m-compo-legend").innerHTML=`
-    <span class="it"><span class="sw" style="background:var(--good)"></span>Promoteurs <b>${pro}</b></span>
-    <span class="it"><span class="sw" style="background:var(--warn)"></span>Passifs <b>${pas}</b></span>
-    <span class="it"><span class="sw" style="background:var(--bad)"></span>Détracteurs <b>${det}</b></span>`;
-  $("#m-compo-foot").innerHTML="Le score NPS = <b>% promoteurs − % détracteurs</b>.";
+  const itm=(col,lbl,n)=>`<span class="it"><span class="sw" style="background:var(${col})"></span>${lbl} <b>${n}</b>`
+    + (nRep&&!petit?` <span class="sub">(${Math.round(100*n/base)} %)</span>`:"")+`</span>`;
+  $("#m-compo-legend").innerHTML=itm("--good","Promoteurs",pro)+itm("--warn","Passifs",pas)+itm("--bad","Détracteurs",det);
+  $("#m-compo-foot").innerHTML="Le score NPS = <b>% promoteurs − % détracteurs</b>"
+    + (nRep?`, sur vos ${nRep} réponse${nRep>1?"s":""} ayant donné une note.`:".");
   $("#m-capline").innerHTML=`Vos indicateurs sur la campagne <b>${esc(mCamp)}</b>`
     + (monConseiller?` — identifiant <span class="tag-mono">${esc(monConseiller)}</span>`:"")
     + `. Évolutions ${mPrev?`vs <b>${esc(mPrev)}</b>`:"(pas de campagne précédente)"}.`;
@@ -1127,17 +1437,20 @@ function renderMoi(){
   const reseauTip=(v,u)=> v==null?"":`<span data-tip="Même indicateur sur l'ensemble du réseau, à la même campagne.">réseau ${fmt(v,1)}${u}</span>`;
   const K=[];
   const csatM=num(r.csat_global), csatR=num(res.csat_global);
-  let [st,pill]=stCsat(csatM);
+  // Même règle que côté réseau, et pour la même raison qu'au-dessus de la jauge : la
+  // vue conseiller ne porte pas `csat_rep`, ses réponses en tiennent lieu de base.
+  const nCsatM=r.csat_rep??tot;
+  let [st,pill]=stVol(...stCsat(csatM),nCsatM);
   K.push({lbl:"Satisfaction de mes clients",sig:"note sur 100",n:csatPct(csatM)==null?"—":Math.round(csatPct(csatM)),u:"%",st,pill,
     ctx:`${fmt(csatM,1)}/5 · ${reseauTip(csatR,"/5")||"réseau —"}`,
-    delta:deltaTag(csatPct(csatM),mPrev?csatPct(num(rp.csat_global)):null,{unit:" pts",vs:mPrev}),
+    delta:deltaTag(csatPct(csatM),mPrev?csatPct(num(rp.csat_global)):null,{unit:" pts",vs:mPrev,fiable:ecartSur(nCsatM,rp.csat_rep??rp.reponses)}),
     spark:sparkline(moiSerie("csat_global").map(csatPct),stCol(st))});
 
   const consM=num(r.csat_conseiller), consR=num(res.csat_conseiller);
-  [st,pill]=stCsat(consM);
+  [st,pill]=stVol(...stCsat(consM),nCsatM);
   K.push({lbl:"Ma qualité de conseil",sig:"écoute, clarté",n:fmt(consM,1),u:"/5",st,pill,
     ctx:reseauTip(consR,"/5")||"note du conseiller",
-    delta:deltaTag(consM,mPrev?num(rp.csat_conseiller):null,{vs:mPrev}),
+    delta:deltaTag(consM,mPrev?num(rp.csat_conseiller):null,{vs:mPrev,fiable:ecartSur(nCsatM,rp.csat_rep??rp.reponses)}),
     spark:sparkline(moiSerie("csat_conseiller"),stCol(st))});
 
   const txM=num(r.taux_reponse);
@@ -1151,20 +1464,20 @@ function renderMoi(){
   // base que le réseau (part des réponses ayant accepté un recontact).
   const tauxCons=row=>{ const n=row.reponses||0; return n?100*(row.consentements||0)/n:null; };
   const consT=tauxCons(r);
-  [st,pill]=stConsent(consT);
+  [st,pill]=stVol(...stConsent(consT),tot);
   K.push({lbl:"Recontacts acceptés",sig:"leads que j'ai générés",n:consT==null?"—":Math.round(consT),u:"%",st,pill,
     ctx:`${r.consentements||0} lead${(r.consentements||0)>1?"s":""} sur ${tot} réponse${tot>1?"s":""}`,
-    delta:deltaTag(consT,mPrev?tauxCons(rp):null,{unit:" pts",vs:mPrev}),
+    delta:deltaTag(consT,mPrev?tauxCons(rp):null,{unit:" pts",vs:mPrev,fiable:ecartSur(tot,rp.reponses)}),
     spark:sparkline(D.campagnes.map(c=>tauxCons(moiRow(c))),stCol(st))});
 
   // Sinistre : seulement pour qui en a traité — un gestionnaire de quittances
   // n'a pas de note sinistre, une tuile « — » se lirait comme un mauvais score.
   if(r.n_sinistre){
     const sinM=num(r.csat_sinistre);
-    [st,pill]=stCsat(sinM);
+    [st,pill]=stVol(...stCsat(sinM),r.n_sinistre);
     K.push({lbl:"Gestion des sinistres",sig:"clients indemnisés",n:fmt(sinM,1),u:"/5",st,pill,
       ctx:`${r.n_sinistre} réponse${r.n_sinistre>1?"s":""} d'indemnisés${r.delai_reel?` · ${fmt(r.delai_reel,0)} j de traitement`:""}`,
-      delta:deltaTag(sinM,mPrev?num(rp.csat_sinistre):null,{vs:mPrev})});
+      delta:deltaTag(sinM,mPrev?num(rp.csat_sinistre):null,{vs:mPrev,fiable:ecartSur(r.n_sinistre,rp.n_sinistre)})});
   }
   $("#m-kpis").innerHTML=K.map(tile).join("");
 
