@@ -1382,8 +1382,14 @@ function majMoi(){
   // Atterrissage sur la dernière campagne où il a REÇU des réponses, pas sur la
   // dernière du réseau : un conseiller absent du dernier fichier ouvrirait sinon
   // un écran vide alors que ses résultats existent le mois d'avant.
+  // À défaut de réponse : la dernière campagne où il a été INVITÉ. Depuis la migration
+  // 20260731090000 on le sait, et c'est là que l'écran a quelque chose à dire (« aucune
+  // réponse sur 812 clients invités ») plutôt que « vous n'étiez pas dans la campagne »,
+  // qui serait faux le mois où il l'était.
+  const derniere=a=>a.length?a[a.length-1]:null;
   const avecRep=(D.campagnes||[]).filter(c=>moiRow(c).reponses);
-  const cible=avecRep.length?avecRep[avecRep.length-1]:(D.campagnes||[]).slice(-1)[0];
+  const avecEnv=(D.campagnes||[]).filter(c=>moiRow(c).envoyes);
+  const cible=derniere(avecRep)||derniere(avecEnv)||derniere(D.campagnes||[]);
   if(cible) fc.value=cible;
   renderMoi();
 }
@@ -1398,7 +1404,20 @@ function renderMoi(){
   const vide=!r.reponses;
   $("#m-body").style.display=vide?"none":"block";
   $("#m-empty").style.display=vide?"block":"none";
-  if(vide) return;
+  if(vide){
+    // Depuis la migration 20260731090000 la vue rend une ligne même sans aucune
+    // réponse : le nombre d'invitations est donc connu, et « aucune réponse » peut
+    // enfin dire sur quoi. Le message figé ne distinguait pas « mes clients n'ont pas
+    // répondu » de « je n'étais pas dans la campagne » — deux situations qui n'ont ni
+    // la même cause ni le même interlocuteur.
+    const nEnv=r.envoyes||0, a=attendu(nEnv, mCamp);
+    $("#m-empty").innerHTML = !nEnv
+      ? `Aucun de vos clients n'a été invité sur la campagne <b>${esc(mCamp)}</b>.`
+        + ` <span class="sub">Vos indicateurs apparaîtront dès qu'une campagne inclura vos clients.</span>`
+      : `<b>Aucune réponse pour l'instant</b> sur les ${nEnv.toLocaleString("fr-FR")} client${nEnv>1?"s":""} invité${nEnv>1?"s":""} sur votre nom en <b>${esc(mCamp)}</b>.`
+        + (a?` <span class="sub">Au taux de participation du réseau (${fmt(a.taux,1)} %), on en attend environ ${Math.round(a.rep)} — le silence n'a pour l'instant rien d'anormal.</span>`:"");
+    return;
+  }
 
   // --- Hero : mon score, l'objectif, le réseau --------------------------------
   const s=r.score_nps==null?null:Number(r.score_nps), sr=res.score_nps==null?null:Number(res.score_nps);
