@@ -1354,12 +1354,20 @@ function renderAgences(){
   }).join("");
 }
 
+// Contrat du répondant : la police portée par SA ligne d'invitation, reprise par
+// `v_verbatims` via `req`. Rien à afficher quand la réponse ne vient pas d'un lien
+// personnalisé (formulaire ouvert en direct) : le champ est alors vide, et une
+// mention « — » laisserait croire à un client sans contrat.
+const vbContrat=v=> v.contrat
+  ? `<span data-tip="Numéro de police du client, repris de son invitation. Sert à retrouver le dossier dans l'outil de gestion.">Contrat <span class="tag-mono">${esc(v.contrat)}</span></span>`
+  : "";
+
 function renderVerbatims(){
   let vb=D.verbatims.filter(v=>v.campagne===camp);
   vb.sort((a,b)=>(b.detracteur?1:0)-(a.detracteur?1:0));
   $("#verbatims").innerHTML= vb.length? vb.slice(0,40).map(v=>`
     <div class="vb ${v.detracteur?"det":""}"><p>« ${esc(v.commentaire)} »</p>
-      <div class="meta"><span>${esc(v.agence||"—")}</span>${v.motif?`<span>${esc(MOTIF_LABELS[v.motif]||v.motif)}</span>`:""}${v.conseiller_id?`<span>${esc(v.conseiller_id)}</span>`:""}<span>${(v.date_reponse||"").slice(0,10)}</span><span>NPS ${v.nps??"—"}</span></div></div>`).join("")
+      <div class="meta">${vbContrat(v)}<span>${esc(v.agence||"—")}</span>${v.motif?`<span>${esc(MOTIF_LABELS[v.motif]||v.motif)}</span>`:""}${v.conseiller_id?`<span>${esc(v.conseiller_id)}</span>`:""}<span>${(v.date_reponse||"").slice(0,10)}</span><span>NPS ${v.nps??"—"}</span></div></div>`).join("")
     : '<div class="empty">Aucun commentaire.</div>';
 }
 
@@ -1555,7 +1563,7 @@ function renderMoi(){
   vb.sort((a,b)=>(b.detracteur?1:0)-(a.detracteur?1:0));
   $("#m-verbatims").innerHTML= vb.length? vb.slice(0,40).map(v=>`
     <div class="vb ${v.detracteur?"det":""}"><p>« ${esc(v.commentaire)} »</p>
-      <div class="meta"><span>${esc(v.agence||"—")}</span>${v.motif?`<span>${esc(MOTIF_LABELS[v.motif]||v.motif)}</span>`:""}<span>${(v.date_reponse||"").slice(0,10)}</span><span>NPS ${v.nps??"—"}</span></div></div>`).join("")
+      <div class="meta">${vbContrat(v)}<span>${esc(v.agence||"—")}</span>${v.motif?`<span>${esc(MOTIF_LABELS[v.motif]||v.motif)}</span>`:""}<span>${(v.date_reponse||"").slice(0,10)}</span><span>NPS ${v.nps??"—"}</span></div></div>`).join("")
     : '<div class="empty">Aucun commentaire sur cette campagne.</div>';
 }
 
@@ -1791,8 +1799,17 @@ let agencesMap=null;
 function fixMojibake(s){ if(!s)return s; if(!/[ÃÂ]/.test(s))return s; try{return decodeURIComponent(escape(s));}catch{return s;} }
 function slugConseiller(g){ return norm(g).replace(/[^a-z0-9.]+/g,".").replace(/^\.+|\.+$/g,""); }
 function nomFromSlug(slug){ return slug.split(".").map(p=>p?p[0].toUpperCase()+p.slice(1):"").join(" ").trim(); }
+// Une date absente vaut null, jamais un échec d'import. L'export sinistres note les
+// dates manquantes « 00/00/0000 » (et, plus rarement, un jour qui n'existe pas :
+// 31/02). Recopiées telles quelles, Postgres refuse le lot ENTIER de 500 lignes
+// (« date/time field value out of range »), donc un dossier sans date d'ouverture
+// emportait tout le fichier. On ne garde que les dates qui existent réellement.
 function parseDate(s){ const m=(s||"").trim().match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/); if(!m)return null;
-  const y=m[3].length===2?"20"+m[3]:m[3]; return `${y}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`; }
+  const d=+m[1], mo=+m[2], y=+(m[3].length===2?"20"+m[3]:m[3]);
+  if(!d||!mo||!y)return null;
+  const iso=`${String(y).padStart(4,"0")}-${String(mo).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+  const t=new Date(iso+"T00:00:00Z");
+  return isNaN(t)||t.toISOString().slice(0,10)!==iso?null:iso; }
 async function loadAgencesMap(){ if(agencesMap)return agencesMap;
   const {data}=await sb.from("agences").select("code,nom,zone,active"); agencesMap={};
   (data||[]).forEach(a=>agencesMap[String(a.code)]={nom:a.nom,zone:a.zone,active:a.active}); return agencesMap; }
