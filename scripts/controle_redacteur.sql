@@ -28,16 +28,34 @@ select 'C. sinistres touches a tort (doit etre 0)',
        count(*)::text from public.envois_sondage
       where motif = 'sinistre' and conseiller_id is distinct from gestionnaire_id
 union all
--- D se lit en deux : un envoi sans AUCUN conseiller n'a jamais eu de gestionnaire
--- à perdre (bénin, la migration du 08/09 ne pouvait rien recopier). Un envoi QUI A
--- un conseiller mais pas de gestionnaire, lui, a perdu l'information.
-select 'D1. sans gestionnaire NI conseiller (benin)',
+-- D SE LIT EN TROIS. Mesuré en prod le 08/09/2026 : 547 / 727 / 0.
+--
+--   D1 — aucun conseiller : rien à recopier, la cellule « Gestionnaire » ET la
+--        cellule « Redacteur » étaient vides. Bénin.
+--   D2 — un conseiller égal au rédacteur de l'import : la cellule
+--        « Gestionnaire » était vide, `conseiller_id` valait donc null avant, le
+--        backfill a recopié null, puis la rebascule a écrit le rédacteur. Rien
+--        n'a été perdu — il n'y avait pas de gestionnaire. Bénin AUSSI, et c'est
+--        le gros du chiffre : 727 sur 1 274, confirmé en recomptant les requêtes
+--        (77 + 70 + 579 lignes « rédacteur sans gestionnaire »).
+--   D3 — un conseiller que l'import n'explique pas. LE SEUL À SURVEILLER : ni
+--        cellule vide, ni rebascule. Piste : un envoi créé par un front qui
+--        n'écrit pas `gestionnaire_id`.
+select 'D1. aucun conseiller, rien a recopier (benin)',
        count(*)::text from public.envois_sondage
       where gestionnaire_id is null and conseiller_id is null
 union all
-select 'D2. gestionnaire PERDU alors qu il y a un conseiller (doit etre 0)',
-       count(*)::text from public.envois_sondage
-      where gestionnaire_id is null and conseiller_id is not null
+select 'D2. cellule Gestionnaire vide, rebascule a mis le redacteur (benin)',
+       count(*)::text from public.envois_sondage e
+       join public.import_redacteur m on m.req = e.req
+      where e.gestionnaire_id is null and e.conseiller_id = m.redacteur
+union all
+select 'D3. sans gestionnaire et INEXPLIQUE (doit etre 0)',
+       count(*)::text from public.envois_sondage e
+       left join public.import_redacteur m on m.req = e.req
+      where e.gestionnaire_id is null
+        and e.conseiller_id is not null
+        and (m.req is null or e.conseiller_id <> m.redacteur)
 union all
 -- Ils n'apparaissent dans AUCUN indicateur (vérifié : 0 ligne dans
 -- v_satisfaction_conseiller, qui se bâtit sur les envois et les réponses, pas sur
