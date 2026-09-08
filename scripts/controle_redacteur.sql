@@ -65,6 +65,12 @@ select 'E. conseillers sans aucune activite (les fantomes)',
       where not exists (select 1 from public.envois_sondage e where e.conseiller_id = c.id)
         and not exists (select 1 from public.reponses_satisfaction r where r.conseiller_id = c.id)
         and not exists (select 1 from public.profils p where p.conseiller_id = c.id)
+        -- `leads` compte AUSSI, et par deux colonnes : les quatre FK vers
+        -- `conseillers` sont en ON DELETE SET NULL, donc un critère incomplet
+        -- ferait passer pour fantôme quelqu'un dont la suppression viderait
+        -- `traite_par` en silence. Cf. scripts/supprimer_conseillers_fantomes.sql.
+        and not exists (select 1 from public.leads l where l.conseiller_id = c.id)
+        and not exists (select 1 from public.leads l where l.traite_par = c.id)
 union all
 -- LA LIGNE QUI COMPTE. Par campagne, le % de `req` absents de l'import :
 --   · quelques %          → NORMAL, cellule « Redacteur » vide (204 lignes sur
@@ -88,16 +94,6 @@ select 'F. ' || e.campagne || ' / ' || coalesce(e.motif, 'quittance') || ' : ' |
  group by e.campagne, e.motif
  order by ligne;
 
--- Pour voir les fantômes de la ligne E avant d'en décider :
--- select c.id, c.nom from public.conseillers c
---  where not exists (select 1 from public.envois_sondage e where e.conseiller_id = c.id)
---    and not exists (select 1 from public.reponses_satisfaction r where r.conseiller_id = c.id)
---    and not exists (select 1 from public.profils p where p.conseiller_id = c.id)
---  order by c.id;
-
--- Et pour les retirer. NE PAS jouer avant d'avoir lu la ligne F : un mois de
--- requête encore manquant en rendra certains légitimes plus tard.
--- delete from public.conseillers c
---  where not exists (select 1 from public.envois_sondage e where e.conseiller_id = c.id)
---    and not exists (select 1 from public.reponses_satisfaction r where r.conseiller_id = c.id)
---    and not exists (select 1 from public.profils p where p.conseiller_id = c.id);
+-- Et pour les retirer : voir scripts/supprimer_conseillers_fantomes.sql, qui porte
+-- le critère complet (les cinq colonnes qui pointent vers `conseillers`) et montre
+-- la liste avant de la supprimer.
