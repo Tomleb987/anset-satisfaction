@@ -51,6 +51,7 @@ supabase/
     20260730180000_journal_relances.sql          # journal des passages de relance (supervision par la fraîcheur)
     20260730190000_profils_lecture_restreinte.sql # un compte ne lit plus que sa propre ligne de profils
     20260730200000_reinitialisation_mot_de_passe.sql # jetons de mot de passe oublié (empreinte seule, usage unique)
+    20260903090000_relance_unique_par_personne.sql # un seul rappel par personne / 6 mois glissants + péremption à 90 j
     20260908090000_attribution_redacteur.sql     # attribution au rédacteur : gestionnaire_id + import_redacteur + appliquer_redacteur()
 scripts/
   creer_comptes.mjs                             # comptes d'accès : deux listes nominatives (managers, conseillers actifs)
@@ -130,14 +131,25 @@ satisfaction_anset.html                          # app : Satisfaction · Prospec
 
 ## Relance J+7 des non-répondants
 
-Un **seul** rappel par invitation, 7 jours après l'envoi, aux clients qui n'ont pas répondu.
-Mode `?relance=1` de `envoi-sondage`, bouton **Relancer** dans l'onglet Administration.
+Un **seul** rappel par personne tous les 6 mois, 7 jours après l'envoi, aux clients qui n'ont pas
+répondu. Mode `?relance=1` de `envoi-sondage`, bouton **Relancer** dans l'onglet Administration.
 
-- **La file est une vue**, `v_relances_a_faire` : envoi parti depuis ≥ 7 jours, jamais relancé,
-  et aucune réponse *postérieure à cet envoi*. La comparaison porte sur `date_reponse >= date_envoi`
+- **La file est une vue**, `v_relances_a_faire` : envoi parti depuis ≥ 7 jours et ≤ 90 jours, cette
+  invitation jamais relancée, et aucune réponse *postérieure à cet envoi*. La comparaison porte sur `date_reponse >= date_envoi`
   et non sur la simple existence d'une réponse : un même `req` réapparaît d'une campagne à l'autre,
-  une réponse du mois dernier ne prouve rien sur l'invitation en cours. **Le délai se change là et
+  une réponse du mois dernier ne prouve rien sur l'invitation en cours. **Les délais se changent là et
   nulle part ailleurs** — l'app compte la file, elle ne la recalcule pas.
+- **Un rappel par PERSONNE, pas par invitation** (`20260903090000`) : l'unicité d'`envois_sondage`
+  porte sur *(campagne, email)*, donc un client présent en juin, juillet et août avait trois
+  invitations et recevait trois rappels — cause du dépassement du forfait Brevo du 03/09/2026. La
+  vue plafonne à **un rappel par e-mail sur 6 mois glissants** (`not exists` sur `date_relance`
+  récente, pour les passages antérieurs) et n'en laisse **qu'une ligne par personne dans la file**
+  (`distinct on (email)`, pour les doublons d'un même passage) — les deux sont nécessaires, le
+  premier ne voit pas le second. C'est l'invitation la plus récente qui l'emporte.
+- **Péremption à 90 jours** : `distinct on` ne réserve qu'une ligne par personne, les autres
+  campagnes restent `date_relance is null` à jamais. Sans borne haute, la réouverture des 6 mois
+  repêcherait ce stock — vérifié en local : une invitation de 243 jours arrivait en tête de file.
+  Au-delà de 90 jours (trois campagnes), une invitation sort de la file pour de bon.
 - **Un rappel et pas deux** : `envois_sondage.date_relance` est posée *avant* l'envoi, sous condition
   `date_relance is null`. Deux passages simultanés (le cron et un clic) ne peuvent pas doubler
   l'e-mail ; un échec SMTP remet la date à null, jamais le statut d'envoi.

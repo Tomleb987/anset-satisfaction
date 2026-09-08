@@ -254,12 +254,15 @@ Deno.serve(async (req: Request) => {
 
   // --- Le lot à traiter. Deux sources, une seule mécanique en aval :
   //   diffusion : la table, lignes 'a_envoyer' de la campagne visée ;
-  //   relance   : la vue `v_relances_a_faire`, qui PORTE la règle des 7 jours
-  //               (envoi parti depuis ≥ 7 j, aucune réponse postérieure à cet
-  //               envoi, jamais relancé). Le délai se change dans la migration
-  //               20260730120000 et nulle part ailleurs — la fonction et l'app
-  //               lisent cette file, elles ne la recalculent pas, sinon le nombre
-  //               affiché finit par ne plus correspondre à ce qui part.
+  //   relance   : la vue `v_relances_a_faire`, qui PORTE toute la règle du rappel
+  //               (envoi parti depuis ≥ 7 j et ≤ 90 j, aucune réponse postérieure à
+  //               cet envoi, cette invitation jamais relancée, ET la personne pas
+  //               déjà relancée dans les 6 derniers mois — toutes campagnes
+  //               confondues, une seule ligne par e-mail). Les trois délais se
+  //               changent dans la migration 20260903090000 et nulle part ailleurs
+  //               — la fonction et l'app lisent cette file, elles ne la
+  //               recalculent pas, sinon le nombre affiché finit par ne plus
+  //               correspondre à ce qui part.
   const requete = relance
     ? supabase.from("v_relances_a_faire")
         .select("id, req, email, prenom, nom, agence, conseiller_id, motif")

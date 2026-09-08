@@ -9,8 +9,15 @@ package-lock.json
 supabase/.temp/
 supabase/.branches/
 
-# Données clients (RGPD) — NE JAMAIS committer les exports .xlsx
+# Laissé par l'import des scripts Python depuis un autre script
+__pycache__/
+
+# Données clients (RGPD) — NE JAMAIS committer les exports de requête mensuelle.
+# Le .csv autant que le .xlsx : les requêtes déposées le 08/09/2026 sont arrivées en
+# CSV, non couvertes par la seule règle *.xlsx, et un `git add -A` les emportait —
+# noms, e-mails, téléphones et mention RGPD de ~5 000 clients par fichier.
 *.xlsx
+*.csv
 
 # Captures d'écran de diagnostic : elles montrent presque toujours des données
 # nominatives (liste des comptes, coordonnées de leads). Les visuels de marque, eux,

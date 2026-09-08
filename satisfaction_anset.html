@@ -498,8 +498,9 @@
          globale, pas mensuelle. -->
     <div class="card pad" style="margin-top:16px; border-left:4px solid var(--ciel)">
       <h2 class="title">Relance des non-répondants</h2>
-      <p class="sub">Un <b>seul</b> rappel par invitation, 7 jours après l'envoi, aux clients qui n'ont pas répondu.
-        Toutes campagnes confondues : un lot parti fin de mois se relance début du mois suivant.</p>
+      <p class="sub">Un <b>seul</b> rappel par personne tous les 6 mois, 7 jours après l'envoi, aux clients qui n'ont pas répondu.
+        Toutes campagnes confondues : un lot parti fin de mois se relance début du mois suivant. Un client
+        présent dans plusieurs campagnes ne compte qu'une fois, sur son invitation la plus récente.</p>
       <div class="adminrow">
         <button class="btn ghost" id="rl-refresh">Actualiser le compte</button>
         <button class="btn ghost" id="rl-dry">Aperçu (aucun envoi)</button>
@@ -2203,10 +2204,12 @@ $("#d-campagne").addEventListener("change",e=>{
 });
 
 // ====================== RELANCE J+7 DES NON-RÉPONDANTS ======================
-// La file est la vue `v_relances_a_faire` : elle porte la règle (7 jours écoulés,
-// aucune réponse depuis l'envoi, jamais relancé). L'app la COMPTE, elle ne la
-// recalcule pas — deux définitions du même délai finiraient par diverger, et le
-// nombre affiché ne correspondrait plus à ce qui part.
+// La file est la vue `v_relances_a_faire` : elle porte la règle (envoi entre 7 et
+// 90 jours, aucune réponse depuis l'envoi, cette invitation jamais relancée, et la
+// personne pas déjà relancée dans les 6 derniers mois — une seule ligne par
+// e-mail). L'app la COMPTE, elle ne la recalcule pas — deux définitions du même
+// délai finiraient par diverger, et le nombre affiché ne correspondrait plus à ce
+// qui part.
 let relTimer=null;
 const rlNotice=(m,k="ok")=>{ $("#rl-notice").innerHTML=`<div class="notice ${k}" style="margin-top:12px">${esc(m)}</div>`; };
 
@@ -2215,7 +2218,7 @@ async function majRelances(){
   if(error){ $("#rl-count").innerHTML=`<span style="color:var(--bad)">${esc(error.message)}</span>`; throw error; }
   const n=count??0;
   $("#rl-count").innerHTML = n
-    ? `<b class="num">${n}</b> client${n>1?"s":""} sans réponse depuis plus de 7 jours, jamais relancé${n>1?"s":""}.`
+    ? `<b class="num">${n}</b> personne${n>1?"s":""} sans réponse depuis plus de 7 jours, non relancée${n>1?"s":""} depuis 6 mois.`
     : `Personne à relancer pour l'instant.`;
   return n;
 }
@@ -2270,7 +2273,7 @@ async function relancer(mode){
   if(mode==="send"){
     let n=0; try{ n=await majRelances(); }catch{ rlNotice("Impossible de compter la file.","err"); return; }
     if(!n){ rlNotice("Aucune relance en attente.","err"); return; }
-    if(!confirm(`Envoyer un rappel à ${n} client(s) sans réponse depuis plus de 7 jours ?\n\nChacun ne peut le recevoir qu'une seule fois.`)) return;
+    if(!confirm(`Envoyer un rappel à ${n} personne(s) sans réponse depuis plus de 7 jours ?\n\nChacune n'en reçoit qu'un tous les 6 mois, quel que soit le nombre de campagnes où elle apparaît.`)) return;
   }
   rlNotice("Traitement…");
   try{
