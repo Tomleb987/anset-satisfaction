@@ -56,6 +56,9 @@ supabase/
 scripts/
   creer_comptes.mjs                             # comptes d'accès : deux listes nominatives (managers, conseillers actifs)
   redacteur_mapping.py                          # requêtes .xlsx -> SQL de rebascule gestionnaire → rédacteur (à jouer une fois par mois passé)
+  controle_vue_relance.sql                      # la vue de relance en prod porte-t-elle les 3 délais et les 2 grants ?
+  controle_gestionnaire_manquant.sql            # démêle les envois sans gestionnaire_id (D3 seul doit être 0)
+  supprimer_conseillers_fantomes.sql            # retire les rédacteurs créés par la rebascule et jamais sondés
   controle_redacteur.sql                        # vérifie la rebascule ; la ligne F révèle une requête mensuelle manquante
   relance_j7_cron.sql                           # à jouer une fois : pg_cron quotidien qui déclenche la relance
   purge_rgpd.sql                                # cron mensuel de purge des leads sans_suite/ne_pas_contacter

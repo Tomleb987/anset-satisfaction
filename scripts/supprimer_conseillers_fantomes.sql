@@ -30,7 +30,10 @@
 -- =============================================================================
 
 -- --- 1. LES VOIR AVANT DE LES PERDRE ----------------------------------------
-select c.id, c.nom, c.created_at
+-- `id` et `nom` seulement : la prod n'a PAS de colonne `created_at` sur
+-- `conseillers`, alors qu'une base rejouée depuis les migrations l'a. Écart
+-- local/prod constaté le 08/09/2026, de la même famille que celui des `grant`.
+select c.id, c.nom
   from public.conseillers c
  where not exists (select 1 from public.envois_sondage       e where e.conseiller_id = c.id)
    and not exists (select 1 from public.reponses_satisfaction r where r.conseiller_id = c.id)
