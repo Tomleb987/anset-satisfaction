@@ -56,6 +56,7 @@ supabase/
 scripts/
   creer_comptes.mjs                             # comptes d'accès : deux listes nominatives (managers, conseillers actifs)
   redacteur_mapping.py                          # requêtes .xlsx -> SQL de rebascule gestionnaire → rédacteur (à jouer une fois par mois passé)
+  controle_redacteur.sql                        # vérifie la rebascule ; la ligne F révèle une requête mensuelle manquante
   relance_j7_cron.sql                           # à jouer une fois : pg_cron quotidien qui déclenche la relance
   purge_rgpd.sql                                # cron mensuel de purge des leads sans_suite/ne_pas_contacter
   desactivation_surveymonkey.md                  # état + actions (aucun cron déployé)
@@ -85,12 +86,14 @@ satisfaction_anset.html                          # app : Satisfaction · Prospec
   mensuelle porte deux colonnes de personnel ; l'import lit « Redacteur » — celui qui a établi le
   contrat et parlé au client, donc celui que le client note — et retombe sur « Gestionnaire » quand
   elle est vide. « Gestionnaire » est conservé tel quel dans `envois_sondage.gestionnaire_id` (suivi
-  de portefeuille, jamais la personne notée). Les deux divergeaient sur 58 % des 5 114 lignes de la
-  requête du 08/09/2026, et 34 rédacteurs n'apparaissaient jamais comme gestionnaire : leurs notes
-  créditaient quelqu'un d'autre. **Historique** : l'information n'existe qu'au format .xlsx →
-  `python3 scripts/redacteur_mapping.py "requete 2026-06.xlsx" …` (ordre chronologique) produit le
-  SQL qui charge `import_redacteur` puis appelle `appliquer_redacteur()` — rejouable, elle ne réécrit
-  que ce qui diffère. Le **périmètre sinistre reste au gestionnaire** : l'export « sinistres clos »
+  de portefeuille, jamais la personne notée). Les deux divergent sur **61,2 % des 19 479 lignes** des
+  requêtes de juin, juillet et août 2026, qui font apparaître **89 rédacteurs** là où la base ne
+  connaissait qu'une quarantaine de gestionnaires : leurs notes créditaient quelqu'un d'autre. **Historique** : l'information n'existe qu'au format .xlsx →
+  `python3 scripts/redacteur_mapping.py "requete juin.csv" …` (ordre chronologique — sans effet en
+  pratique, aucun `req` n'apparaissant dans deux mois : la quittance est propre à sa période) produit
+  le SQL qui charge `import_redacteur` puis appelle `appliquer_redacteur()` — rejouable, elle ne
+  réécrit que ce qui diffère. **Contrôler ensuite avec `scripts/controle_redacteur.sql`** : un mois
+  de requête jamais fourni laisse ses réponses au gestionnaire sans rien signaler. Le **périmètre sinistre reste au gestionnaire** : l'export « sinistres clos »
   n'a pas de colonne rédacteur, et son gestionnaire a réellement traité le dossier.
 - Import **sinistres clos** : pas de colonne agence ; `gestionnaire` = slug conseiller ; `portable` = tél ;
   `num_sinistre` = req. Un client déjà dans la requête du mois est basculé en `motif='sinistre'` (agence conservée).
