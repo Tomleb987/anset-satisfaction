@@ -41,11 +41,16 @@ select 'authenticated peut lire la file (onglet Administration)',
                 where table_name = 'v_relances_a_faire'
                   and grantee = 'authenticated' and privilege_type = 'SELECT')
 union all
--- Le rôle anon a été révoqué le 11/08 après une fuite publique : il ne doit
--- jamais réapparaître, et un `create or replace view` conserve les grants.
-select 'anon n a AUCUN droit sur la file',
+-- Le rôle anon a été révoqué le 11/08 après une fuite publique, et un
+-- `create or replace view` conserve les grants. On teste `SELECT` et RIEN
+-- D'AUTRE : `TRIGGER`, `REFERENCES` et `TRUNCATE` apparaissent souvent sans
+-- permettre de lire, et un contrôle qui s'en alarme finit par être ignoré.
+-- Première version de ce fichier : elle testait « aucun droit » et a crié au
+-- loup en prod. Détail : scripts/controle_anon_lecture.sql.
+select 'anon ne peut PAS lire la file (SELECT seul compte)',
        not exists (select 1 from information_schema.role_table_grants
-                    where table_name = 'v_relances_a_faire' and grantee = 'anon')
+                    where table_name = 'v_relances_a_faire'
+                      and grantee = 'anon' and privilege_type = 'SELECT')
 union all
 select 'Index partiel idx_envois_email_relance present',
        exists (select 1 from pg_indexes
