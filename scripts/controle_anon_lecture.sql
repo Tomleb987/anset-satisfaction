@@ -63,3 +63,31 @@ select t.table_type,
  where t.table_schema = 'public'
    and g.grantee = 'anon' and g.privilege_type = 'SELECT'
  order by verdict desc, t.table_type, t.table_name;
+
+-- --- 3. QUELLES VUES NE SONT PROTÉGÉES PAR AUCUNE RLS -----------------------
+-- Indépendant des grants, donc toujours lisible APRÈS la révocation — c'est ce
+-- qui permet de reconstituer ce qui a réellement été exposé pendant qu'`anon`
+-- avait ses droits (du 11/08/2026, date de la migration jamais appliquée, au
+-- 08/09/2026, date de sa pose effective).
+--
+-- Une vue en `security_invoker = off` lit ses tables sous les droits de son
+-- PROPRIÉTAIRE : aucune RLS ne s'applique, quel que soit l'appelant. Le grant est
+-- alors le seul verrou. C'est un choix légitime — `v_satisfaction_reseau` sert de
+-- repère de comparaison aux comptes conseiller, dont la RLS restreint les lignes
+-- sources — mais il oblige à surveiller les grants de près.
+--
+-- À LIRE AINSI : toute vue `invoker OFF` qui porte du NOMINATIF (e-mail, nom,
+-- téléphone, commentaire, numéro de contrat) a été publiquement lisible. Une vue
+-- qui ne porte que des agrégats a exposé des chiffres, ce qui n'est pas la même
+-- affaire.
+select c.relname as vue,
+       case
+         when coalesce(c.reloptions::text, '') like '%security_invoker=on%'
+           or coalesce(c.reloptions::text, '') like '%security_invoker=true%'
+              then 'invoker ON  — la RLS de l appelant s applique'
+         else 'invoker OFF — AUCUNE RLS, le grant est le seul verrou'
+       end as protection
+  from pg_class c
+ where c.relnamespace = 'public'::regnamespace
+   and c.relkind = 'v'
+ order by protection, c.relname;
