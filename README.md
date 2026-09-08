@@ -56,9 +56,8 @@ supabase/
 scripts/
   creer_comptes.mjs                             # comptes d'accès : deux listes nominatives (managers, conseillers actifs)
   redacteur_mapping.py                          # requêtes .xlsx -> SQL de rebascule gestionnaire → rédacteur (à jouer une fois par mois passé)
-  controle_vue_relance.sql                      # la vue de relance en prod porte-t-elle les 3 délais et les 2 grants ?
-  controle_anon_lecture.sql                     # ce que le rôle public peut lire ; seul SELECT est une fuite (RLS muette sur les vues)
-  controle_migrations_prod.sql                  # quelles migrations du dépôt ne sont PAS en prod (elles se posent à la main)
+  controle_etat_prod.sql                        # LE contrôle : les 28 migrations + relance + verbatim + anon, tout doit être `t`
+  controle_anon_lecture.sql                     # détail par objet quand controle_etat_prod signale anon ; seul SELECT est une fuite
   controle_gestionnaire_manquant.sql            # démêle les envois sans gestionnaire_id (D3 seul doit être 0)
   supprimer_conseillers_fantomes.sql            # retire les rédacteurs créés par la rebascule et jamais sondés
   controle_redacteur.sql                        # vérifie la rebascule ; la ligne F révèle une requête mensuelle manquante
