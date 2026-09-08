@@ -51,8 +51,10 @@ supabase/
     20260730180000_journal_relances.sql          # journal des passages de relance (supervision par la fraîcheur)
     20260730190000_profils_lecture_restreinte.sql # un compte ne lit plus que sa propre ligne de profils
     20260730200000_reinitialisation_mot_de_passe.sql # jetons de mot de passe oublié (empreinte seule, usage unique)
+    20260908090000_attribution_redacteur.sql     # attribution au rédacteur : gestionnaire_id + import_redacteur + appliquer_redacteur()
 scripts/
   creer_comptes.mjs                             # comptes d'accès : deux listes nominatives (managers, conseillers actifs)
+  redacteur_mapping.py                          # requêtes .xlsx -> SQL de rebascule gestionnaire → rédacteur (à jouer une fois par mois passé)
   relance_j7_cron.sql                           # à jouer une fois : pg_cron quotidien qui déclenche la relance
   purge_rgpd.sql                                # cron mensuel de purge des leads sans_suite/ne_pas_contacter
   desactivation_surveymonkey.md                  # état + actions (aucun cron déployé)
@@ -78,6 +80,17 @@ satisfaction_anset.html                          # app : Satisfaction · Prospec
   `sat_sinistre` / `delai_indemnisation` (smallint 1-5, non nuls seulement si `motif='sinistre'`) ;
   `envois_sondage.motif` (renseigné `'sinistre'` par l'import sinistres clos). Vue
   `v_satisfaction_motif` (campagne × motif) → bloc « par motif » + carte Sinistres du dashboard.
+- **Attribution : le rédacteur, pas le gestionnaire** (migration `20260908090000`). La requête
+  mensuelle porte deux colonnes de personnel ; l'import lit « Redacteur » — celui qui a établi le
+  contrat et parlé au client, donc celui que le client note — et retombe sur « Gestionnaire » quand
+  elle est vide. « Gestionnaire » est conservé tel quel dans `envois_sondage.gestionnaire_id` (suivi
+  de portefeuille, jamais la personne notée). Les deux divergeaient sur 58 % des 5 114 lignes de la
+  requête du 08/09/2026, et 34 rédacteurs n'apparaissaient jamais comme gestionnaire : leurs notes
+  créditaient quelqu'un d'autre. **Historique** : l'information n'existe qu'au format .xlsx →
+  `python3 scripts/redacteur_mapping.py "requete 2026-06.xlsx" …` (ordre chronologique) produit le
+  SQL qui charge `import_redacteur` puis appelle `appliquer_redacteur()` — rejouable, elle ne réécrit
+  que ce qui diffère. Le **périmètre sinistre reste au gestionnaire** : l'export « sinistres clos »
+  n'a pas de colonne rédacteur, et son gestionnaire a réellement traité le dossier.
 - Import **sinistres clos** : pas de colonne agence ; `gestionnaire` = slug conseiller ; `portable` = tél ;
   `num_sinistre` = req. Un client déjà dans la requête du mois est basculé en `motif='sinistre'` (agence conservée).
 - **Branche interaction** : si le répondant déclare **aucune interaction récente**, le formulaire saute
@@ -152,8 +165,8 @@ Table `profils` (une ligne par compte `auth.users`), trois rôles :
 
 ### Le rôle `conseiller`
 
-Le rattachement est le **login de la requête mensuelle** (colonne « Gestionnaire », ex.
-`hina.sansine`) : c'est déjà la clé de `conseillers.id` et la valeur portée par
+Le rattachement est le **login de la requête mensuelle** (colonne « Redacteur », à défaut
+« Gestionnaire », ex. `hina.sansine`) : c'est déjà la clé de `conseillers.id` et la valeur portée par
 `reponses_satisfaction.conseiller_id`. Le compte auth utilise en principe `<login>@anset.pf` — la
 page de connexion complète le domaine, un conseiller saisit son seul identifiant.
 

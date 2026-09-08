@@ -468,7 +468,7 @@
         <div class="adminrow"><label class="fld">Campagne <input type="month" id="r-campagne"></label></div>
         <label class="drop"><span class="ic">⬆︎</span><b>Choisir le fichier .xlsx / .csv</b><br>requête générale
           <input type="file" id="r-file" accept=".xlsx,.xls,.csv"></label>
-        <p class="sub" style="margin:12px 0 0">Dédoublonnage e-mail · cellule « a@x/b@y » → première adresse · exclusions (résilié non-paiement, e-mail manquant ou invalide, invitation de moins d'un mois) · mapping agences · conseillers depuis « Gestionnaire ».</p>
+        <p class="sub" style="margin:12px 0 0">Dédoublonnage e-mail · cellule « a@x/b@y » → première adresse · exclusions (résilié non-paiement, e-mail manquant ou invalide, invitation de moins d'un mois) · mapping agences · conseillers depuis « Redacteur » (repli « Gestionnaire »).</p>
         <div id="r-notice"></div><div id="r-report"></div>
       </div>
       <div class="card pad" style="border-left:4px solid var(--mauve)">
@@ -529,9 +529,10 @@
             <option value="conseiller">Conseiller</option>
             <option value="super_admin">Super administrateur</option>
           </select></label>
-          <!-- Le périmètre d'un conseiller = son login de requête. On le choisit
-               dans la liste réelle des gestionnaires plutôt qu'on ne le tape :
-               un slug inventé donnerait un compte qui ne voit rien. -->
+          <!-- Le périmètre d'un conseiller = son login de requête (colonne
+               « Redacteur », à défaut « Gestionnaire »). On le choisit dans la liste
+               réelle plutôt qu'on ne le tape : un slug inventé donnerait un compte
+               qui ne voit rien. -->
           <label class="fld" id="u-lien-fld" hidden>Conseiller <select id="u-conseiller"></select></label>
           <!-- Champ en clair et non masqué : ce mot de passe n'est pas celui de
                l'administrateur, il est destiné à être lu puis transmis. -->
@@ -1194,7 +1195,7 @@ function renderBD(){
     + `<th data-tip="Score NPS = % promoteurs − % détracteurs, calculé sur les seules réponses NOTÉES. Affiché en entier ; valeur exacte dans l'infobulle du score.">Score NPS</th>`
     + `<th data-tip="Ce que vaut la mesure, indépendamment du score : moins de ${VOL.conclure} notes → insuffisante ; moins de ${VOL.tendance} → à confirmer ; au-delà, la participation prend le relais.">Fiabilité</th>`
     + `<th>Satisfaction</th>`
-    + `<th data-tip="Gestion du sinistre notée /5 par les clients réellement indemnisés (invités depuis la liste des sinistres clos).<br>« — » = ce périmètre n'a traité aucun sinistre : un gestionnaire de quittances n'a pas de note sinistre.">Sat. sinistre</th>`
+    + `<th data-tip="Gestion du sinistre notée /5 par les clients réellement indemnisés (invités depuis la liste des sinistres clos).<br>« — » = ce périmètre n'a traité aucun sinistre : un rédacteur de quittances n'a pas de note sinistre.">Sat. sinistre</th>`
     + `<th data-tip="Délai MOYEN entre ouverture et clôture des sinistres du périmètre. Sensible aux dossiers anciens : voir la médiane dans la carte « Gestion des sinistres » pour le délai du dossier typique.">Délai réel</th>`
     + `<th data-tip="Réponses rapportées aux invitations envoyées, sur l'agence d'origine de l'envoi.">Taux rép.</th></tr></thead>`;
   const body=rows.length? rows.map(x=>{
@@ -1547,7 +1548,7 @@ function renderMoi(){
     delta:deltaTag(consT,mPrev?tauxCons(rp):null,{unit:" pts",vs:mPrev,fiable:ecartSur(tot,rp.reponses)}),
     spark:sparkline(D.campagnes.map(c=>tauxCons(moiRow(c))),stCol(st))});
 
-  // Sinistre : seulement pour qui en a traité — un gestionnaire de quittances
+  // Sinistre : seulement pour qui en a traité — un rédacteur de quittances
   // n'a pas de note sinistre, une tuile « — » se lirait comme un mauvais score.
   if(r.n_sinistre){
     const sinM=num(r.csat_sinistre);
@@ -1821,6 +1822,7 @@ function mapReqHeaders(h){ const idx={}; h.forEach((x,i)=>{ const n=norm(x);
   else if(n.includes("dossier"))idx.dossier=i; else if(n.includes("mail"))idx.email=i;
   else if(n==="nom")idx.nom=i; else if(n.includes("prenom"))idx.prenom=i;
   else if(n.includes("tel")||n.includes("portable")||n.includes("mobile"))idx.telephone=i;
+  else if(n.includes("redacteur"))idx.redacteur=i;
   else if(n.includes("gestionnaire")){ if(n.includes("corporel"))idx.gestionnaire_corp=i; else idx.gestionnaire=i; } });
   return idx; }
 async function importFichier(buf,source){
@@ -1861,12 +1863,24 @@ async function importFichier(buf,source){
       if(emailInvalide){ motif_ex=`adresse e-mail invalide : ${brutEmail.slice(0,80)}`; stx.exclu_invalide++; }
       else { motif_ex="pas d'email"; stx.exclu_email++; } }
     if(email){ if(seen.has(email)){ stx.doublons++; continue; } seen.add(email); }
-    let conseiller_id=null; const gslug=slugConseiller(g("gestionnaire")||(isSin?g("gestionnaire_corp"):""));
-    if(gslug && ag.active!==false){ conseiller_id=gslug; if(!cons[gslug]) cons[gslug]= ag.nom?{id:gslug,nom:nomFromSlug(gslug),agence:ag.nom}:{id:gslug,nom:nomFromSlug(gslug)}; }
+    // Attribution : le RÉDACTEUR, c'est-à-dire la personne qui a établi le contrat
+    // et parlé au client — pas le gestionnaire, qui suit le portefeuille sans
+    // forcément l'avoir eu au téléphone. Les deux colonnes de la requête mensuelle
+    // divergent sur 59 % des lignes, et 34 rédacteurs n'apparaissent JAMAIS comme
+    // gestionnaire : leurs notes étaient portées au crédit de quelqu'un d'autre.
+    // Repli sur le gestionnaire, indispensable à l'export sinistres, qui n'a pas de
+    // colonne rédacteur (là, le gestionnaire a réellement traité le dossier).
+    // `web` est un rédacteur comme un autre : il identifie les contrats souscrits en
+    // ligne, et cette part mérite d'être suivie plutôt que rendue invisible.
+    const gslug=slugConseiller(g("gestionnaire")||(isSin?g("gestionnaire_corp"):""));
+    const aslug=slugConseiller(g("redacteur"))||gslug;
+    let conseiller_id=null;
+    if(aslug && ag.active!==false){ conseiller_id=aslug; if(!cons[aslug]) cons[aslug]= ag.nom?{id:aslug,nom:nomFromSlug(aslug),agence:ag.nom}:{id:aslug,nom:nomFromSlug(aslug)}; }
     if(statut_envoi==="a_envoyer") stx.a_envoyer++;
     const req= isSin?(g("sinistre")||g("dossier")||null):(g("quittance")||g("dossier")||null);
     const row2={ req, campagne, email:email||null, nom:g("nom")||null, prenom:g("prenom")||null, telephone:g("telephone")||null,
-      agence:ag.nom, zone:ag.zone, conseiller_id, produit:g("produit")||null, police:g("police")||null, dossier:g("dossier")||null,
+      agence:ag.nom, zone:ag.zone, conseiller_id, gestionnaire_id:gslug||null,
+      produit:g("produit")||null, police:g("police")||null, dossier:g("dossier")||null,
       motif:isSin?"sinistre":null, statut_envoi, motif_exclusion:motif_ex };
     if(isSin){ row2.date_ouverture=parseDate(g("ouverture")); row2.date_cloture=parseDate(g("cloture")); }
     rows.push(row2);
