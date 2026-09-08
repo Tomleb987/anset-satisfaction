@@ -28,8 +28,16 @@ select 'C. sinistres touches a tort (doit etre 0)',
        count(*)::text from public.envois_sondage
       where motif = 'sinistre' and conseiller_id is distinct from gestionnaire_id
 union all
-select 'D. gestionnaire_id perdu (doit etre 0)',
-       count(*)::text from public.envois_sondage where gestionnaire_id is null
+-- D se lit en deux : un envoi sans AUCUN conseiller n'a jamais eu de gestionnaire
+-- à perdre (bénin, la migration du 08/09 ne pouvait rien recopier). Un envoi QUI A
+-- un conseiller mais pas de gestionnaire, lui, a perdu l'information.
+select 'D1. sans gestionnaire NI conseiller (benin)',
+       count(*)::text from public.envois_sondage
+      where gestionnaire_id is null and conseiller_id is null
+union all
+select 'D2. gestionnaire PERDU alors qu il y a un conseiller (doit etre 0)',
+       count(*)::text from public.envois_sondage
+      where gestionnaire_id is null and conseiller_id is not null
 union all
 -- Ils n'apparaissent dans AUCUN indicateur (vérifié : 0 ligne dans
 -- v_satisfaction_conseiller, qui se bâtit sur les envois et les réponses, pas sur
@@ -46,9 +54,16 @@ union all
 --                            rédacteur connu le gestionnaire reste en place.
 --   · proche de 100 %     → LA REQUÊTE DU MOIS MANQUE. La redemander, puis
 --                            rejouer redacteur_mapping.py sur TOUS les mois.
---   · motif 'sinistre'    → écarté volontairement, ignorer la ligne.
+--   · motif 'sinistre'    → écarté volontairement, ignorer la ligne. Attendu très
+--                            haut, mais PAS 100 % : quelques `req` sinistre entrent
+--                            dans l'import par collision de clé `Dossier`, et la
+--                            fonction les écarte (reqs_ignores_sin).
+--   · motif 'quittance'   → en base c'est NULL, pas 'quittance' (l'import écrit
+--                            `motif: isSin ? "sinistre" : null`). D'où le
+--                            `coalesce` ci-dessous : sans lui le libellé entier
+--                            devient nul et la ligne devient illisible.
 --   · campagne postérieure au 08/09/2026 → l'import porte déjà le rédacteur.
-select 'F. ' || e.campagne || ' / ' || e.motif || ' : ' || count(*) || ' envois, manquants',
+select 'F. ' || e.campagne || ' / ' || coalesce(e.motif, 'quittance') || ' : ' || count(*) || ' envois, manquants',
        round(100.0 * count(*) filter (where m.req is null) / count(*), 1)::text || ' %'
   from public.envois_sondage e
   left join public.import_redacteur m on m.req = e.req
